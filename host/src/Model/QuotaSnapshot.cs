@@ -11,6 +11,15 @@ namespace CodexToolsHost.Model
             DateTimeOffset? secondaryResetsAt,
             DateTimeOffset observedAt,
             bool isStale)
+            : this(primaryRemainingPercent, secondaryRemainingPercent, primaryResetsAt,
+                secondaryResetsAt, observedAt, isStale, null, null, "")
+        {
+        }
+
+        public QuotaSnapshot(int? primaryRemainingPercent, int? secondaryRemainingPercent,
+            DateTimeOffset? primaryResetsAt, DateTimeOffset? secondaryResetsAt,
+            DateTimeOffset observedAt, bool isStale, int? primaryWindowMinutes,
+            int? secondaryWindowMinutes, string lastError)
         {
             PrimaryRemainingPercent = primaryRemainingPercent;
             SecondaryRemainingPercent = secondaryRemainingPercent;
@@ -18,6 +27,9 @@ namespace CodexToolsHost.Model
             SecondaryResetsAt = secondaryResetsAt;
             ObservedAt = observedAt;
             IsStale = isStale;
+            PrimaryWindowMinutes = primaryWindowMinutes;
+            SecondaryWindowMinutes = secondaryWindowMinutes;
+            LastError = lastError ?? "";
         }
 
         public int? PrimaryRemainingPercent { get; private set; }
@@ -26,6 +38,9 @@ namespace CodexToolsHost.Model
         public DateTimeOffset? SecondaryResetsAt { get; private set; }
         public DateTimeOffset ObservedAt { get; private set; }
         public bool IsStale { get; private set; }
+        public int? PrimaryWindowMinutes { get; private set; }
+        public int? SecondaryWindowMinutes { get; private set; }
+        public string LastError { get; private set; }
 
         public static QuotaSnapshot EmptyStale()
         {
@@ -43,8 +58,14 @@ namespace CodexToolsHost.Model
 
         public QuotaSnapshot AsStale()
         {
+            return AsStale(LastError);
+        }
+
+        public QuotaSnapshot AsStale(string error)
+        {
             return new QuotaSnapshot(PrimaryRemainingPercent, SecondaryRemainingPercent,
-                PrimaryResetsAt, SecondaryResetsAt, ObservedAt, true);
+                PrimaryResetsAt, SecondaryResetsAt, ObservedAt, true,
+                PrimaryWindowMinutes, SecondaryWindowMinutes, error);
         }
 
         private static int? ToRemaining(int? used)

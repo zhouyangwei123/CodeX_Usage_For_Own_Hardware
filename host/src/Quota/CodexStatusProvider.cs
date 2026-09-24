@@ -1,369 +1,354 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using CodexToolsHost.Model;
-using CodexToolsHost.Protocol;
 
 namespace CodexToolsHost.Quota
 {
-    /// <summary>Codex 运行状态 + 额度：通过本机 codex app-server JSON-RPC 获取</summary>
+    /// <summary>A single cancellable supervisor owns the Codex child and quota polling.</summary>
     public sealed class CodexStatusProvider : ICodexStatusSource, IDisposable
     {
-        public const int RequestTimeoutSeconds = 60;
-        public const int CodexStateOffline = 0;
-        public const int CodexStateIdle = 1;
-        public const int CodexStateRunning = 2;
-        public const int CodexStateWaiting = 3;
-        public const int CodexStateError = 4;
-        public const int CodexStateComplete = 5;
-
+        public const int RequestTimeoutSeconds = 20;
+        public const int CodexStateOffline = 0, CodexStateIdle = 1, CodexStateRunning = 2,
+            CodexStateWaiting = 3, CodexStateError = 4, CodexStateComplete = 5;
         private readonly Func<IJsonLineTransport> _transportFactory;
-        private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
-        private readonly SemaphoreSlim _refreshGate = new SemaphoreSlim(1, 1);
         private readonly object _sync = new object();
-        private IJsonLineTransport _transport;
+        private readonly int _refreshSeconds;
+        private CancellationTokenSource _lifetime;
+        private CancellationTokenSource _connectionLifetime;
         private JsonLineRpcClient _client;
-        private Timer _reconnectTimer;
-        private Timer _refreshTimer;
-        private int _reconnectIndex;
-        private bool _stopped;
-        private bool _disposed;
+        private Task _runner;
+        private Task _refreshTask;
+        private TaskCompletionSource<bool> _firstAttempt;
+        private bool _stopped = true, _disposed, _ready, _accountConfirmed;
+        private long _accountRevision;
+        private string _identity;
         private QuotaSnapshot _quota = QuotaSnapshot.EmptyStale();
         private int _state = CodexStateOffline;
         private string _statusText = "connecting...";
-        private int _refreshSeconds;
+        private int _reconnectCount;
+        private int _consecutiveFailures;
+        private sealed class AccountChangedException : Exception { }
 
         public CodexStatusProvider(Func<IJsonLineTransport> transportFactory, int refreshSeconds)
         {
             if (transportFactory == null) throw new ArgumentNullException("transportFactory");
             _transportFactory = transportFactory;
-            _refreshSeconds = refreshSeconds < 10 ? 30 : refreshSeconds;
+            _refreshSeconds = Math.Max(10, refreshSeconds);
         }
-
         public static CodexStatusProvider CreateDefault(int refreshSeconds)
         {
-            return new CodexStatusProvider(delegate
-            {
+            return new CodexStatusProvider(delegate {
                 string path = CodexLocator.Find();
-                if (path == null) throw new FileNotFoundException("未找到 Codex 可执行文件");
+                if (path == null) throw new FileNotFoundException("Codex executable was not found.");
                 return new ProcessJsonLineTransport(path, "app-server --listen stdio://");
             }, refreshSeconds);
         }
-
         public event Action Changed;
         public event Action<string> StatusChanged;
+        public QuotaSnapshot Quota { get { lock (_sync) return _quota; } }
+        public int State { get { lock (_sync) return _state; } }
+        public string StatusText { get { lock (_sync) return _statusText; } }
+        public string LastError { get { return Quota.LastError; } }
+        public int ReconnectCount { get { lock (_sync) return _reconnectCount; } }
+        public int ConsecutiveFailures { get { lock (_sync) return _consecutiveFailures; } }
+        public bool IsRequestInFlight { get { lock (_sync) return _refreshTask != null && !_refreshTask.IsCompleted; } }
 
-        public QuotaSnapshot Quota { get { lock (_sync) { return _quota; } } }
-        public int State { get { lock (_sync) { return _state; } } }
-        public string StatusText { get { lock (_sync) { return _statusText; } } }
-
-        public async Task StartAsync()
+        public Task StartAsync()
         {
-            await _gate.WaitAsync().ConfigureAwait(false);
+            lock (_sync)
+            {
+                if (_disposed) throw new ObjectDisposedException("CodexStatusProvider");
+                if (!_stopped) return _firstAttempt.Task;
+                _stopped = false;
+                var lifetime = new CancellationTokenSource();
+                _lifetime = lifetime;
+                var first = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _firstAttempt = first;
+                Task prior = _runner;
+                _runner = Task.Run(async delegate {
+                    if (prior != null) { try { await prior.ConfigureAwait(false); } catch (Exception) { } }
+                    try { await RunAsync(lifetime.Token, first).ConfigureAwait(false); }
+                    finally { lifetime.Dispose(); }
+                });
+                return first.Task;
+            }
+        }
+
+        private async Task RunAsync(CancellationToken token, TaskCompletionSource<bool> first)
+        {
+            int connectionFailures = 0;
             try
             {
-                if (_client != null) return;
-                _stopped = false;
-                IJsonLineTransport transport = _transportFactory();
-                transport.Start();
-                JsonLineRpcClient client = new JsonLineRpcClient(transport);
-                client.NotificationReceived += OnNotification;
-                client.TransportFaulted += OnTransportFaulted;
+                while (!token.IsCancellationRequested)
+                {
+                    JsonLineRpcClient client = null;
+                    CancellationTokenSource connection = null;
+                    IJsonLineTransport transport = null;
+                    try
+                    {
+                        token.ThrowIfCancellationRequested();
+                        transport = _transportFactory();
+                        client = new JsonLineRpcClient(transport);
+                        connection = CancellationTokenSource.CreateLinkedTokenSource(token);
+                        client.NotificationReceived += OnNotification;
+                        client.TransportFaulted += OnTransportFaulted;
+                        lock (_sync)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            _client = client; _connectionLifetime = connection; _ready = false; _accountConfirmed = false; _refreshTask = null;
+                        }
+                        transport.Start();
+                        var info = new Dictionary<string, object> { { "name", "codex-tools-host" }, { "title", "CodeX Tools Host" }, { "version", "0.2.0" } };
+                        var initialize = new Dictionary<string, object> { { "clientInfo", info },
+                            { "capabilities", new Dictionary<string, object> { { "experimentalApi", true } } } };
+                        await client.RequestAsync("initialize", initialize, TimeSpan.FromSeconds(10), connection.Token).ConfigureAwait(false);
+                        await client.SendNotificationAsync("initialized", null, connection.Token).ConfigureAwait(false);
+                        lock (_sync) { connection.Token.ThrowIfCancellationRequested(); _ready = true; }
+                        SetState(CodexStateIdle, "connected");
+                        int failures = 0, timeouts = 0;
+                        while (!connection.IsCancellationRequested)
+                        {
+                            bool authenticationFailure = false;
+                            try
+                            {
+                                await RefreshQuotaAsync().ConfigureAwait(false);
+                                failures = 0; timeouts = 0; connectionFailures = 0;
+                                first.TrySetResult(true);
+                            }
+                            catch (AccountChangedException) { continue; }
+                            catch (OperationCanceledException) { throw; }
+                            catch (Exception ex)
+                            {
+                                first.TrySetException(ex);
+                                failures++;
+                                var rpc = ex as CodexRpcException;
+                                authenticationFailure = rpc != null && rpc.IsAuthenticationError;
+                                if (ex is TimeoutException) timeouts++; else timeouts = 0;
+                                if (timeouts >= 3 || ex is IOException && !(ex is InvalidDataException)) break;
+                            }
+                            lock (_sync) _consecutiveFailures = failures;
+                            int seconds = authenticationFailure ? 300 : (int)Math.Min(300,
+                                _refreshSeconds * Math.Pow(2, Math.Min(4, failures)));
+                            await Task.Delay(TimeSpan.FromSeconds(seconds), connection.Token).ConfigureAwait(false);
+                        }
+                    }
+                    catch (OperationCanceledException) { if (token.IsCancellationRequested) break; }
+                    catch (Exception ex)
+                    {
+                        first.TrySetException(ex);
+                        if (!token.IsCancellationRequested) MarkStale("额度连接失败，正在重连", client);
+                    }
+                    finally
+                    {
+                        lock (_sync)
+                        {
+                            if (ReferenceEquals(_client, client)) { _client = null; _ready = false; _connectionLifetime = null; }
+                        }
+                        if (connection != null) connection.Cancel();
+                        if (client != null)
+                        {
+                            client.NotificationReceived -= OnNotification;
+                            client.TransportFaulted -= OnTransportFaulted;
+                            client.Dispose();
+                        }
+                        else if (transport != null) transport.Dispose();
+                        if (connection != null) connection.Dispose();
+                    }
+                    if (token.IsCancellationRequested) break;
+                    MarkStale("额度连接已断开，正在重连", null);
+                    SetState(CodexStateOffline, "reconnecting...");
+                    lock (_sync) _reconnectCount++;
+                    int secondsToReconnect = Math.Min(60, 1 << Math.Min(6, connectionFailures++));
+                    await Task.Delay(TimeSpan.FromSeconds(secondsToReconnect), token).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) { }
+            finally { first.TrySetCanceled(); }
+        }
+
+        public Task RefreshQuotaAsync()
+        {
+            lock (_sync)
+            {
+                if (_disposed || _stopped || !_ready || _client == null)
+                {
+                    var failed = new TaskCompletionSource<bool>();
+                    failed.SetException(new InvalidOperationException("Codex quota connection is not ready."));
+                    return failed.Task;
+                }
+                if (_refreshTask != null && !_refreshTask.IsCompleted) return _refreshTask;
+                JsonLineRpcClient client = _client;
+                CancellationToken token = _connectionLifetime.Token;
+                long revision = _accountRevision;
+                _refreshTask = Task.Run(delegate { return RefreshCoreAsync(client, revision, token); });
+                return _refreshTask;
+            }
+        }
+
+        private async Task RefreshCoreAsync(JsonLineRpcClient client, long revision, CancellationToken token)
+        {
+            try
+            {
+                lock (_sync) { EnsureCurrent(client, revision, token); _accountConfirmed = false; }
+                // Account identity is checked locally before fetching account-scoped values.
+                var accountResult = await client.RequestAsync("account/read", new Dictionary<string, object> { { "refreshToken", false } },
+                    TimeSpan.FromSeconds(RequestTimeoutSeconds), token).ConfigureAwait(false);
+                var account = QuotaParser.Dict(accountResult, "account");
+                string type = QuotaParser.Text(account, "type");
+                object accountValue;
+                if (!accountResult.TryGetValue("account", out accountValue) || accountValue != null &&
+                    (account == null || string.IsNullOrEmpty(type)))
+                    throw new InvalidDataException("Invalid Codex account response.");
+                if (account == null || type == "apiKey" || type == "amazonBedrock")
+                {
+                    ClearQuota(client, revision, "未登录 Codex 账户或当前认证不提供账户额度");
+                    throw new CodexRpcException(401, true);
+                }
+                string accountKey = IdentityText(account, "accountId") ?? IdentityText(account, "id") ?? IdentityText(account, "email");
+                if (accountKey == null) throw new InvalidDataException("Account identity is unavailable.");
+                string identity = type + ":" + accountKey;
+                bool changed = false;
                 lock (_sync)
                 {
-                    _transport = transport;
-                    _client = client;
+                    EnsureCurrent(client, revision, token);
+                    if (_identity != identity)
+                    {
+                        _quota = QuotaSnapshot.EmptyStale(); _identity = identity; changed = true;
+                    }
+                    _accountConfirmed = true;
                 }
-
-                var clientInfo = new Dictionary<string, object>();
-                clientInfo["name"] = "codex-tools-host";
-                clientInfo["title"] = "CodeX Tools Host";
-                clientInfo["version"] = "0.1.0";
-                var capabilities = new Dictionary<string, object>();
-                capabilities["experimentalApi"] = true;
-                var initialize = new Dictionary<string, object>();
-                initialize["clientInfo"] = clientInfo;
-                initialize["capabilities"] = capabilities;
-
-                await client.RequestAsync("initialize", initialize, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
-                await client.SendNotificationAsync("initialized", null).ConfigureAwait(false);
-                SetState(CodexStateIdle, "connected");
-                _reconnectIndex = 0;
-                await RefreshQuotaAsync().ConfigureAwait(false);
-
-                _refreshTimer = new Timer(delegate
+                if (changed) RaiseChanged();
+                var result = await client.RequestAsync("account/rateLimits/read", null,
+                    TimeSpan.FromSeconds(RequestTimeoutSeconds), token).ConfigureAwait(false);
+                var snapshot = QuotaParser.Full(result);
+                lock (_sync)
                 {
-                    try { RefreshQuotaAsync().Wait(TimeSpan.FromSeconds(20)); }
-                    catch (Exception) { }
-                }, null, TimeSpan.FromSeconds(_refreshSeconds), TimeSpan.FromSeconds(_refreshSeconds));
-            }
-            catch
-            {
-                CloseConnection();
-                SetState(CodexStateOffline, "connect failed");
-                ScheduleReconnect();
-                throw;
-            }
-            finally
-            {
-                _gate.Release();
-            }
-        }
-
-        public async Task RefreshQuotaAsync()
-        {
-            await _refreshGate.WaitAsync().ConfigureAwait(false);
-            try
-            {
-                JsonLineRpcClient client;
-                lock (_sync) { client = _client; }
-                if (client == null) throw new InvalidOperationException("未连接 Codex");
-                IDictionary<string, object> result = await client.RequestAsync(
-                    "account/rateLimits/read", null, TimeSpan.FromSeconds(RequestTimeoutSeconds)).ConfigureAwait(false);
-                PublishQuota(ParseFull(result));
-            }
-            catch
-            {
-                lock (_sync) { _quota = _quota.AsStale(); }
+                    EnsureCurrent(client, revision, token);
+                    _quota = snapshot; _consecutiveFailures = 0;
+                }
                 RaiseChanged();
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                var rpc = ex as CodexRpcException;
+                string error = ex is TimeoutException ? "额度请求超时，保留最近成功值" :
+                    ex is InvalidDataException ? "额度响应无效，保留最近成功值" :
+                    rpc != null && rpc.IsAuthenticationError ? "Codex 登录已失效，请在 Codex 中重新登录" : "额度请求失败，等待重试";
+                bool current;
+                lock (_sync) current = ReferenceEquals(_client, client) && revision == _accountRevision && !token.IsCancellationRequested;
+                if (current)
+                {
+                    if (rpc != null && rpc.IsAuthenticationError) ClearQuota(client, revision, error);
+                    else MarkStale(error, client);
+                }
                 throw;
             }
-            finally
+        }
+
+        private void EnsureCurrent(JsonLineRpcClient client, long revision, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            if (!ReferenceEquals(client, _client) || _stopped)
+                throw new OperationCanceledException("Quota source changed.");
+            // An account notification is normal during initialize. Re-read the account
+            // on this connection; reconnecting would receive the same notification again.
+            if (revision != _accountRevision) throw new AccountChangedException();
+        }
+        private static string IdentityText(IDictionary<string, object> account, string key)
+        {
+            object value;
+            string text = account.TryGetValue(key, out value) ? value as string : null;
+            return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+        }
+        private void ClearQuota(JsonLineRpcClient client, long revision, string error)
+        {
+            lock (_sync)
             {
-                _refreshGate.Release();
+                if (!ReferenceEquals(_client, client) || revision != _accountRevision) return;
+                _quota = QuotaSnapshot.EmptyStale().AsStale(error);
+                _identity = null; _accountConfirmed = false;
             }
+            RaiseChanged();
         }
-
-        public void Stop()
+        private void MarkStale(string error, JsonLineRpcClient expected)
         {
-            _stopped = true;
-            Timer t;
-            lock (_sync) { t = _reconnectTimer; _reconnectTimer = null; }
-            if (t != null) t.Dispose();
-            lock (_sync) { t = _refreshTimer; _refreshTimer = null; }
-            if (t != null) t.Dispose();
-            CloseConnection();
+            lock (_sync)
+            {
+                if (_stopped || expected != null && !ReferenceEquals(_client, expected)) return;
+                _quota = _quota.AsStale(error);
+            }
+            RaiseChanged();
         }
-
-        public void Dispose()
+        private void OnTransportFaulted(object sender, Exception error)
         {
-            if (_disposed) return;
-            Stop();
-            _disposed = true;
-            _gate.Dispose();
-            _refreshGate.Dispose();
+            lock (_sync)
+            {
+                if (!ReferenceEquals(sender, _client) || _stopped) return;
+                if (_connectionLifetime != null) _connectionLifetime.Cancel();
+                _quota = _quota.AsStale("额度连接已断开，正在重连");
+            }
+            RaiseChanged();
         }
-
         private void OnNotification(object sender, RpcNotificationEventArgs args)
         {
-            string method = args.Method;
-            if (string.Equals(method, "account/rateLimits/updated", StringComparison.Ordinal))
+            lock (_sync) { if (!ReferenceEquals(sender, _client) || _stopped) return; }
+            if (args.Method == "account/updated")
             {
-                object snapshotValue;
-                IDictionary<string, object> snapshot = args.Parameters.TryGetValue("rateLimits", out snapshotValue)
-                    ? snapshotValue as IDictionary<string, object>
-                    : null;
-                if (snapshot != null) PublishQuota(ParseSparse(snapshot));
-            }
-            else if (string.Equals(method, "item/started", StringComparison.Ordinal))
-            {
-                string thread = ReadString(args.Parameters, "threadId");
-                string text = "RUN " + ShortId(thread);
-                SetState(CodexStateRunning, text);
-            }
-            else if (string.Equals(method, "item/completed", StringComparison.Ordinal))
-            {
-                string thread = ReadString(args.Parameters, "threadId");
-                SetState(CodexStateComplete, "DONE " + ShortId(thread));
-            }
-            else if (string.Equals(method, "guardian/warning", StringComparison.Ordinal))
-            {
-                string message = ReadString(args.Parameters, "message") ?? "需要确认";
-                SetState(CodexStateWaiting, "WAIT " + Trim(AsciiClean(message), 26));
-            }
-            else if (string.Equals(method, "agent/message/delta", StringComparison.Ordinal))
-            {
-                if (State == CodexStateRunning)
+                lock (_sync)
                 {
-                    string delta = ReadString(args.Parameters, "delta") ?? "";
-                    SetState(CodexStateRunning, "RUN " + Trim(AsciiClean(delta), 24));
+                    if (!ReferenceEquals(sender, _client) || _stopped) return;
+                    _accountRevision++; _identity = null;
+                    _accountConfirmed = false;
+                    _quota = QuotaSnapshot.EmptyStale().AsStale("账户已变化，等待重新获取额度");
                 }
+                RaiseChanged();
+                return;
             }
-        }
-
-        private void OnTransportFaulted(object sender, Exception exception)
-        {
-            if (_stopped) return;
-            CloseConnection();
-            SetState(CodexStateOffline, "disconnected");
-            ScheduleReconnect();
-        }
-
-        private void ScheduleReconnect()
-        {
-            if (_stopped || _disposed) return;
-            int[] delays = { 1, 2, 5, 15, 30, 60, 120, 300 };
-            int index = Math.Min(_reconnectIndex, delays.Length - 1);
-            if (_reconnectIndex < delays.Length - 1) _reconnectIndex++;
-            lock (_sync)
+            if (args.Method == "account/rateLimits/updated")
             {
-                if (_reconnectTimer != null) return;
-                _reconnectTimer = new Timer(delegate
+                try
                 {
-                    lock (_sync) { if (_reconnectTimer != null) _reconnectTimer.Dispose(); _reconnectTimer = null; }
-                    try { StartAsync().Wait(TimeSpan.FromSeconds(80)); }
-                    catch { ScheduleReconnect(); }
-                }, null, TimeSpan.FromSeconds(delays[index]), Timeout.InfiniteTimeSpan);
+                    lock (_sync)
+                    {
+                        if (!ReferenceEquals(sender, _client) || !_accountConfirmed || _identity == null) return;
+                        var next = QuotaParser.Sparse(QuotaParser.Dict(args.Parameters, "rateLimits"), _quota);
+                        if (next == null) return;
+                        _quota = next;
+                    }
+                    RaiseChanged();
+                }
+                catch (InvalidDataException) { MarkStale("额度推送无效，等待重新获取", sender as JsonLineRpcClient); }
             }
+            // Desktop activity is observed independently by DesktopLogStatusMonitor.
         }
-
-        private void CloseConnection()
-        {
-            JsonLineRpcClient client;
-            IJsonLineTransport transport;
-            lock (_sync)
-            {
-                client = _client;
-                transport = _transport;
-                _client = null;
-                _transport = null;
-            }
-            if (client != null)
-            {
-                client.NotificationReceived -= OnNotification;
-                client.TransportFaulted -= OnTransportFaulted;
-                client.Dispose();
-            }
-            if (transport != null) transport.Dispose();
-        }
-
         private void SetState(int state, string text)
         {
+            lock (_sync) { if (_stopped) return; _state = state; _statusText = text; }
+            var handler = StatusChanged; if (handler != null) handler(text);
+            RaiseChanged();
+        }
+        private void RaiseChanged() { var handler = Changed; if (handler != null) handler(); }
+        public void Stop()
+        {
+            CancellationTokenSource lifetime;
+            JsonLineRpcClient client;
             lock (_sync)
             {
-                _state = state;
-                _statusText = text;
+                if (_stopped) return;
+                _stopped = true; _ready = false; lifetime = _lifetime; client = _client;
+                _quota = _quota.AsStale("额度服务已停止"); _state = CodexStateOffline; _statusText = "stopped";
             }
-            var handler = StatusChanged;
-            if (handler != null) handler(text);
-            RaiseChanged();
+            try { if (lifetime != null) lifetime.Cancel(); } catch (ObjectDisposedException) { }
+            if (client != null) client.Dispose();
         }
-
-        private void PublishQuota(QuotaSnapshot snapshot)
+        public void Dispose()
         {
-            lock (_sync) { _quota = snapshot; }
-            RaiseChanged();
-        }
-
-        private void RaiseChanged()
-        {
-            var handler = Changed;
-            if (handler != null) handler();
-        }
-
-        private QuotaSnapshot ParseFull(IDictionary<string, object> result)
-        {
-            var buckets = ReadDict(result, "rateLimitsByLimitId");
-            IDictionary<string, object> codex = null;
-            if (buckets != null) codex = ReadDict(buckets, "codex");
-            IDictionary<string, object> snapshot = codex ?? ReadDict(result, "rateLimits")
-                ?? new Dictionary<string, object>();
-            var primary = ReadDict(snapshot, "primary");
-            var secondary = ReadDict(snapshot, "secondary");
-            return QuotaSnapshot.FromUsedPercent(
-                ReadInt(primary, "usedPercent"),
-                ReadInt(secondary, "usedPercent"),
-                ReadLong(primary, "resetsAt"),
-                ReadLong(secondary, "resetsAt"),
-                DateTimeOffset.UtcNow);
-        }
-
-        private QuotaSnapshot ParseSparse(IDictionary<string, object> snapshot)
-        {
-            QuotaSnapshot current = Quota;
-            var primary = ReadDict(snapshot, "primary");
-            var secondary = ReadDict(snapshot, "secondary");
-            int? prim = primary == null ? current.PrimaryRemainingPercent : ToRemaining(ReadInt(primary, "usedPercent"));
-            int? sec = secondary == null ? current.SecondaryRemainingPercent : ToRemaining(ReadInt(secondary, "usedPercent"));
-            DateTimeOffset? primReset = primary == null ? current.PrimaryResetsAt : ReadReset(primary, current.PrimaryResetsAt);
-            DateTimeOffset? secReset = secondary == null ? current.SecondaryResetsAt : ReadReset(secondary, current.SecondaryResetsAt);
-            return new QuotaSnapshot(prim, sec, primReset, secReset, DateTimeOffset.UtcNow, false);
-        }
-
-        private static IDictionary<string, object> ReadDict(IDictionary<string, object> source, string key)
-        {
-            if (source == null) return null;
-            object value;
-            return source.TryGetValue(key, out value) ? value as IDictionary<string, object> : null;
-        }
-
-        private static string ReadString(IDictionary<string, object> source, string key)
-        {
-            if (source == null) return null;
-            object value;
-            if (!source.TryGetValue(key, out value) || value == null) return null;
-            return Convert.ToString(value);
-        }
-
-        private static int? ReadInt(IDictionary<string, object> source, string key)
-        {
-            if (source == null) return null;
-            object value;
-            if (!source.TryGetValue(key, out value) || value == null) return null;
-            try { return Convert.ToInt32(value); }
-            catch (Exception) { return null; }
-        }
-
-        private static long? ReadLong(IDictionary<string, object> source, string key)
-        {
-            if (source == null) return null;
-            object value;
-            if (!source.TryGetValue(key, out value) || value == null) return null;
-            try { return Convert.ToInt64(value); }
-            catch (Exception) { return null; }
-        }
-
-        private static int? ToRemaining(int? used)
-        {
-            if (!used.HasValue) return null;
-            return 100 - Math.Max(0, Math.Min(100, used.Value));
-        }
-
-        private static DateTimeOffset? ReadReset(IDictionary<string, object> source, DateTimeOffset? fallback)
-        {
-            long? unix = ReadLong(source, "resetsAt");
-            if (!unix.HasValue) return fallback;
-            try { return DateTimeOffset.FromUnixTimeSeconds(unix.Value); }
-            catch (Exception) { return fallback; }
-        }
-
-        private static string ShortId(string id)
-        {
-            if (string.IsNullOrEmpty(id)) return "";
-            return id.Length <= 8 ? id : id.Substring(0, 8);
-        }
-
-        private static string Trim(string text, int max)
-        {
-            if (string.IsNullOrEmpty(text)) return "";
-            text = text.Replace("\r", " ").Replace("\n", " ").Trim();
-            if (text.Length <= max) return text;
-            return text.Substring(0, max);
-        }
-
-        /* OLED 只支持 ASCII：非 ASCII 字符（如中文消息）统一转为空格，避免显示 ??? */
-        private static string AsciiClean(string text)
-        {
-            if (string.IsNullOrEmpty(text)) return "";
-            var sb = new StringBuilder();
-            foreach (char ch in text)
-                sb.Append(ch >= 0x20 && ch <= 0x7E ? ch : ' ');
-            string s = sb.ToString();
-            while (s.Contains("  ")) s = s.Replace("  ", " ");
-            return s.Trim();
+            lock (_sync) { if (_disposed) return; _disposed = true; }
+            Stop();
         }
     }
 }
