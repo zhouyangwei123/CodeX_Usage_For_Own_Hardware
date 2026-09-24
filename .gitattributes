@@ -1,0 +1,4 @@
+# Preserve imported firmware byte-for-byte, including existing line endings.
+firmware/** -text
+*.dll binary
+*.ico binary
