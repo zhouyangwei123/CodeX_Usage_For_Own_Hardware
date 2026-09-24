@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -136,7 +137,8 @@ namespace CodexToolsHost.Tests
                         TabControl tabs = tabsField == null ? null
                             : tabsField.GetValue(form) as TabControl;
                         if (tabs == null) return;
-                        foreach (TabPage tab in tabs.TabPages)
+                        foreach (TabPage tab in tabs.TabPages[3].Controls
+                            .OfType<TabControl>().SelectMany(section => section.TabPages.Cast<TabPage>()))
                         {
                             if (tab.Text == "米家控制")
                             {
@@ -786,7 +788,6 @@ namespace CodexToolsHost.Tests
             public void SetRgbMode(string mode) { }
             public void RefreshQuota() { }
             public void ShowSettings() { }
-            public void ToggleDeepSeek() { }
             public void RestartChatGpt() { }
             public void Toast(string message) { }
             public void RunMijiaShortcut(int index) { LastMijiaShortcut = index; }

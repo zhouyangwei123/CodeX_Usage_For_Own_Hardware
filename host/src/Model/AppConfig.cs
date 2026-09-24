@@ -54,6 +54,7 @@ namespace CodexToolsHost.Model
         public const string DefaultFileName = "CodexToolsHost.json";
         public const string AutoPort = "auto";
         private static readonly int[] AllowedQuotaHudScalePercents = { 60, 75, 90, 100 };
+        private readonly object _saveSync = new object();
 
         private AppConfig(string configPath, bool usesFallback)
         {
@@ -99,6 +100,7 @@ namespace CodexToolsHost.Model
         public string ConfigPath { get; private set; }
         public bool UsesFallbackPath { get; private set; }
         public bool NeedsSave { get; private set; }
+        public bool RemovedSwitchBindingMigrated { get; private set; }
         public int ConfigVersion { get; set; }
         public string SerialPort { get; set; }
         public int CodexRefreshSeconds { get; set; }
@@ -167,6 +169,11 @@ namespace CodexToolsHost.Model
         }
 
         public void Save()
+        {
+            lock (_saveSync) SaveCore();
+        }
+
+        private void SaveCore()
         {
             ConfigVersion = 9;
             SerialPort = SerialPortSelection.Normalize(SerialPort);
@@ -255,16 +262,25 @@ namespace CodexToolsHost.Model
             encRot["param"] = EncoderRotate.Param;
             values["encoderRotate"] = encRot;
             string json = new JavaScriptSerializer().Serialize(values);
-            string temp = ConfigPath + ".tmp";
-            File.WriteAllText(temp, json, new UTF8Encoding(false));
-            if (File.Exists(ConfigPath))
+            if (!(new JavaScriptSerializer().DeserializeObject(json) is IDictionary<string, object>))
+                throw new InvalidDataException("配置序列化结果无效，原文件未修改。");
+            string temp = ConfigPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
             {
-                try { File.Replace(temp, ConfigPath, null); }
-                catch (Exception) { File.Delete(ConfigPath); File.Move(temp, ConfigPath); }
+                byte[] bytes = new UTF8Encoding(false).GetBytes(json);
+                using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write,
+                    FileShare.None, 4096, FileOptions.WriteThrough))
+                {
+                    stream.Write(bytes, 0, bytes.Length);
+                    stream.Flush(true);
+                }
+                if (File.Exists(ConfigPath)) File.Replace(temp, ConfigPath, ConfigPath + ".bak");
+                else File.Move(temp, ConfigPath);
             }
-            else
+            finally
             {
-                File.Move(temp, ConfigPath);
+                // Never delete the live configuration as a fallback for failed replacement.
+                if (File.Exists(temp)) File.Delete(temp);
             }
             NeedsSave = false;
         }
@@ -385,12 +401,32 @@ namespace CodexToolsHost.Model
                     /* 旧“聚焦 Codex”动作已并入“启动 CodeX” */
                     if (string.Equals(action, "codexFocus", StringComparison.OrdinalIgnoreCase))
                         action = "launchCodex";
-                    Bindings[key] = new ActionSpec(action, ReadString(spec, "param") ?? "");
+                    string param = ReadString(spec, "param") ?? "";
+                    if (string.Equals(action, "toggleDeepSeek", StringComparison.OrdinalIgnoreCase))
+                    {
+                        action = "none";
+                        param = "";
+                        NeedsSave = true;
+                        RemovedSwitchBindingMigrated = true;
+                    }
+                    Bindings[key] = new ActionSpec(action, param);
                 }
             }
 
             var er = values.ContainsKey("encoderRotate") ? values["encoderRotate"] as IDictionary<string, object> : null;
-            if (er != null) EncoderRotate = new ActionSpec(ReadString(er, "action") ?? "cycleOled", ReadString(er, "param") ?? "1");
+            if (er != null)
+            {
+                string action = ReadString(er, "action") ?? "cycleOled";
+                string param = ReadString(er, "param") ?? "1";
+                if (string.Equals(action, "toggleDeepSeek", StringComparison.OrdinalIgnoreCase))
+                {
+                    action = "none";
+                    param = "";
+                    NeedsSave = true;
+                    RemovedSwitchBindingMigrated = true;
+                }
+                EncoderRotate = new ActionSpec(action, param);
+            }
 
             var mijia = values.ContainsKey("mijia")
                 ? values["mijia"] as IDictionary<string, object> : null;

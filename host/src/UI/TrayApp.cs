@@ -37,6 +37,10 @@ namespace CodexToolsHost.UI
 
             var menu = new ContextMenuStrip();
             _statusItem = new ToolStripMenuItem(_bridge.BuildSummaryText()) { Enabled = false };
+            ToolStripMenuItem migrationItem = _config.RemovedSwitchBindingMigrated
+                ? new ToolStripMenuItem("旧版账号切换绑定已停用；请在按键与旋钮中检查")
+                    { Enabled = false }
+                : null;
             var settingsItem = new ToolStripMenuItem("打开设置…");
             var refreshItem = new ToolStripMenuItem("刷新额度");
             _quotaHudItem = new ToolStripMenuItem("显示额度与 API 余额");
@@ -80,6 +84,7 @@ namespace CodexToolsHost.UI
                 rgbItem,
                 new ToolStripSeparator(),
                 exitItem });
+            if (migrationItem != null) menu.Items.Insert(1, migrationItem);
             _icon.ContextMenuStrip = menu;
 
             menu.Opening += delegate { UpdateHudMenuChecks(); };

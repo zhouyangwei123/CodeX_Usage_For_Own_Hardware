@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO.Ports;
@@ -23,7 +23,7 @@ namespace CodexToolsHost.UI
             "mediaPlayPause","mediaNext","mediaPrev",
             "scrollUp","scrollDown","cycleOled",
             "rgbStatus","rgbSolid","rgbBreath","rgbRainbow","rgbWave","rgbBlink","rgbOff",
-            "refreshQuota","showSettings","toggleDeepSeek",
+            "refreshQuota","showSettings",
             "mijia1","mijia2","mijia3","mijia4","mijia5","mijia6","mijia7","mijia8"
         };
 
@@ -36,7 +36,7 @@ namespace CodexToolsHost.UI
             "播放/暂停","下一曲","上一曲",
             "上滚","下滚","切换 OLED 页",
             "RGB 状态色","RGB 常亮","RGB 呼吸","RGB 彩虹","RGB 波动","RGB 闪烁","RGB 关闭",
-            "刷新额度","打开设置","切换 DeepSeek/官方账号",
+            "刷新额度","打开设置",
             "米家快捷1","米家快捷2","米家快捷3","米家快捷4",
             "米家快捷5","米家快捷6","米家快捷7","米家快捷8"
         };
@@ -85,6 +85,9 @@ namespace CodexToolsHost.UI
         private readonly AppConfig _config;
         private readonly BridgeService _bridge;
         private TabControl _tabs;
+        private Button[] _navigationButtons;
+        private TabControl _servicesSections;
+        private TabControl _diagnosticsSections;
         private DataGridView _grid;
         private ComboBox _encRotateAction;
         private TextBox _encRotateParam;
@@ -126,10 +129,16 @@ namespace CodexToolsHost.UI
         private Label _pcTemperatureSourceValue;
         private Label _pcUpdatedValue;
         private Label _pcStateValue;
-        private ComboBox _deepSeekModelCombo;
-        private Label _deepSeekStateValue;
-        private Label _deepSeekPathValue;
-        private Label _deepSeekResult;
+        private Label _codexQuotaStatus;
+        private Label _codexPrimaryValue;
+        private Label _codexSecondaryValue;
+        private Label _overviewDeviceHealth;
+        private Label _overviewProviderHealth;
+        private Label _overviewPcSummary;
+        private Label _diagnosticDeviceHealth;
+        private Label _diagnosticProviderHealth;
+        private PcMetricsSnapshot _latestPcMetrics;
+        private Label _migrationNotice;
         private MijiaSettingsPanel _mijiaPanel;
 
         public SettingsForm(AppConfig config, BridgeService bridge)
@@ -137,37 +146,272 @@ namespace CodexToolsHost.UI
             _config = config;
             _bridge = bridge;
             Text = "CodeX Tools 设置";
-            Width = 760;
-            Height = 560;
+            Width = 1020;
+            Height = 760;
+            MinimumSize = new Size(900, 650);
+            AutoScaleMode = AutoScaleMode.Dpi;
             StartPosition = FormStartPosition.CenterScreen;
             MinimizeBox = false;
-            MaximizeBox = false;
+            MaximizeBox = true;
 
             BuildTabs();
             BuildBottom();
             _bridge.PcMetricsChanged += SafeUpdatePcMetrics;
+            _bridge.Codex.Changed += OnCodexChanged;
             _bridge.DeepSeek.Changed += OnDeepSeekChanged;
             _bridge.OpenCodeGo.Changed += OnOpenCodeGoChanged;
             LoadConfig();
             _goDisplayTimer.Interval = 1000;
-            _goDisplayTimer.Tick += delegate { UpdateOpenCodeGoDetails(); };
+            _goDisplayTimer.Tick += delegate
+            {
+                if (_tabs.SelectedIndex == 0) UpdateOverview();
+                if (_tabs.SelectedIndex == 3 && _servicesSections.SelectedIndex == 0) UpdateOpenCodeGoDetails();
+                if (_tabs.SelectedIndex == 4) UpdateDiagnostics();
+            };
             _goDisplayTimer.Start();
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+            UpdateOverview();
         }
 
         private void BuildTabs()
         {
-            _tabs = new TabControl { Dock = DockStyle.Fill };
-
-            _tabs.TabPages.Add(BuildButtonsTab());
-            _tabs.TabPages.Add(BuildEncoderTab());
-            _tabs.TabPages.Add(BuildApiBalanceTab());
-            _tabs.TabPages.Add(BuildDeepSeekTab());
-            _tabs.TabPages.Add(BuildDisplayTab());
-            _tabs.TabPages.Add(BuildMonitorTab());
-            _tabs.TabPages.Add(BuildMijiaTab());
-            _tabs.TabPages.Add(BuildAboutTab());
+            _tabs = new TabControl { Dock = DockStyle.Fill, Name = "pageTabs",
+                Font = new Font("Microsoft YaHei UI", 10f),
+                Appearance = TabAppearance.FlatButtons, SizeMode = TabSizeMode.Fixed,
+                ItemSize = new Size(0, 1), TabStop = false };
+            _tabs.TabPages.Add(BuildOverviewTab());
+            _tabs.TabPages.Add(BuildButtonsAndEncoderTab());
+            TabPage display = BuildDisplayTab();
+            display.Text = "显示与灯效";
+            _tabs.TabPages.Add(display);
+            _tabs.TabPages.Add(BuildServicesTab());
+            _tabs.TabPages.Add(BuildDiagnosticsTab());
+            foreach (TabPage page in _tabs.TabPages)
+                if (page.BackColor != Color.FromArgb(246, 248, 251))
+                    page.BackColor = Color.FromArgb(246, 248, 251);
+            _tabs.SelectedIndexChanged += delegate
+            {
+                UpdateNavigationSelection();
+                if (_tabs.SelectedIndex == 0) UpdateOverview();
+                if (_tabs.SelectedIndex == 3 && _servicesSections.SelectedIndex == 0) UpdateApiBalanceDetails();
+                if (_tabs.SelectedIndex == 4)
+                {
+                    UpdateDiagnostics();
+                    if (_diagnosticsSections.SelectedIndex == 0)
+                        UpdatePcMetrics(_latestPcMetrics ?? _bridge.PcMetrics);
+                }
+            };
 
             Controls.Add(_tabs);
+            Panel navigation = BuildNavigation();
+            Controls.Add(navigation);
+            UpdateNavigationSelection();
+        }
+
+        private Panel BuildNavigation()
+        {
+            var navigation = new Panel { Dock = DockStyle.Left, Width = 192,
+                BackColor = Color.FromArgb(30, 45, 67), Padding = new Padding(0, 0, 1, 0) };
+            var header = new Panel { Dock = DockStyle.Top, Height = 96 };
+            header.Controls.Add(new Label { Text = "CodeX Tools", Dock = DockStyle.Top,
+                Height = 52, Padding = new Padding(18, 18, 0, 0),
+                ForeColor = Color.White, Font = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold) });
+            header.Controls.Add(new Label { Text = "设备与服务", Dock = DockStyle.Bottom,
+                Height = 32, Padding = new Padding(18, 0, 0, 0),
+                ForeColor = Color.FromArgb(180, 198, 219), Font = new Font("Microsoft YaHei UI", 9f) });
+            var items = new Panel { Dock = DockStyle.Fill };
+            _navigationButtons = new Button[_tabs.TabPages.Count];
+            for (int index = _tabs.TabPages.Count - 1; index >= 0; index--)
+            {
+                int selectedIndex = index;
+                var button = new Button { Text = _tabs.TabPages[index].Text, Dock = DockStyle.Top,
+                    Height = 52, FlatStyle = FlatStyle.Flat,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Padding = new Padding(18, 0, 0, 0),
+                    Font = new Font("Microsoft YaHei UI", 10f),
+                    ForeColor = Color.FromArgb(210, 221, 235),
+                    BackColor = navigation.BackColor };
+                button.FlatAppearance.BorderSize = 0;
+                button.FlatAppearance.MouseOverBackColor = Color.FromArgb(48, 69, 97);
+                button.Click += delegate { _tabs.SelectedIndex = selectedIndex; };
+                _navigationButtons[index] = button;
+                items.Controls.Add(button);
+            }
+            navigation.Controls.Add(items);
+            navigation.Controls.Add(header);
+            return navigation;
+        }
+
+        private void UpdateNavigationSelection()
+        {
+            if (_navigationButtons == null) return;
+            for (int index = 0; index < _navigationButtons.Length; index++)
+            {
+                bool selected = index == _tabs.SelectedIndex;
+                _navigationButtons[index].BackColor = selected
+                    ? Color.FromArgb(56, 91, 139) : Color.FromArgb(30, 45, 67);
+                _navigationButtons[index].ForeColor = selected
+                    ? Color.White : Color.FromArgb(210, 221, 235);
+            }
+        }
+
+        private TabPage BuildOverviewTab()
+        {
+            var page = new TabPage("总览") { BackColor = Color.FromArgb(246, 248, 251) };
+            var content = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
+                RowCount = 5, Padding = new Padding(18), AutoScroll = true };
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 176));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 116));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 148));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+            var heading = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 8) };
+            heading.Controls.Add(new Label { Text = "总览", Dock = DockStyle.Left, Width = 140,
+                Font = new Font("Microsoft YaHei UI", 17f, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleLeft });
+            var refresh = new Button { Name = "refreshQuotaButton", Text = "刷新额度",
+                Dock = DockStyle.Right, Width = 110, Height = 32,
+                BackColor = Color.White, FlatStyle = FlatStyle.Flat };
+            refresh.FlatAppearance.BorderColor = Color.FromArgb(198, 209, 222);
+            refresh.Click += delegate { _bridge.RefreshQuota(); UpdateOverview(); };
+            heading.Controls.Add(refresh);
+            content.Controls.Add(heading, 0, 0);
+
+            var quotaCard = CreateOverviewCard(4);
+            quotaCard.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            quotaCard.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            quotaCard.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            quotaCard.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            quotaCard.Controls.Add(CreateOverviewTitle("Codex 额度"), 0, 0);
+            _codexQuotaStatus = CreateOverviewValue("codexQuotaStatus", "--", Color.DimGray);
+            _codexPrimaryValue = CreateOverviewValue("codexPrimaryValue", "--", Color.FromArgb(33, 55, 83));
+            _codexSecondaryValue = CreateOverviewValue("codexSecondaryValue", "--", Color.FromArgb(33, 55, 83));
+            quotaCard.Controls.Add(_codexQuotaStatus, 0, 1);
+            quotaCard.Controls.Add(_codexPrimaryValue, 0, 2);
+            quotaCard.Controls.Add(_codexSecondaryValue, 0, 3);
+            content.Controls.Add(quotaCard, 0, 1);
+
+            var healthCards = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2,
+                RowCount = 1, Margin = new Padding(0) };
+            healthCards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            healthCards.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            var deviceCard = CreateOverviewCard(2);
+            deviceCard.Margin = new Padding(0, 0, 6, 8);
+            deviceCard.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            deviceCard.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            deviceCard.Controls.Add(CreateOverviewTitle("设备链路"), 0, 0);
+            _overviewDeviceHealth = CreateOverviewValue("deviceHealth", "--", Color.FromArgb(33, 55, 83));
+            deviceCard.Controls.Add(_overviewDeviceHealth, 0, 1);
+            var providerCard = CreateOverviewCard(2);
+            providerCard.Margin = new Padding(6, 0, 0, 8);
+            providerCard.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+            providerCard.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            providerCard.Controls.Add(CreateOverviewTitle("API 服务"), 0, 0);
+            _overviewProviderHealth = CreateOverviewValue("providerHealth", "--", Color.FromArgb(33, 55, 83));
+            providerCard.Controls.Add(_overviewProviderHealth, 0, 1);
+            healthCards.Controls.Add(deviceCard, 0, 0);
+            healthCards.Controls.Add(providerCard, 1, 0);
+            content.Controls.Add(healthCards, 0, 2);
+
+            var pcCard = CreateOverviewCard(2);
+            pcCard.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            pcCard.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            pcCard.Controls.Add(CreateOverviewTitle("PC 简况"), 0, 0);
+            _overviewPcSummary = CreateOverviewValue("overviewPcSummary", "--", Color.FromArgb(33, 55, 83));
+            pcCard.Controls.Add(_overviewPcSummary, 0, 1);
+            content.Controls.Add(pcCard, 0, 3);
+            page.Controls.Add(content);
+            return page;
+        }
+
+        private static TableLayoutPanel CreateOverviewCard(int rows)
+        {
+            return new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
+                RowCount = rows, Padding = new Padding(16, 10, 16, 8),
+                Margin = new Padding(0, 0, 0, 8), BackColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle };
+        }
+
+        private static Label CreateOverviewTitle(string title)
+        {
+            return new Label { Text = title, Dock = DockStyle.Fill,
+                Font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(32, 55, 85), TextAlign = ContentAlignment.MiddleLeft };
+        }
+
+        private static Label CreateOverviewValue(string name, string value, Color color)
+        {
+            return new Label { Name = name, Text = value, Dock = DockStyle.Fill,
+                ForeColor = color, TextAlign = ContentAlignment.MiddleLeft,
+                AutoEllipsis = true };
+        }
+
+        private TabPage BuildButtonsAndEncoderTab()
+        {
+            var page = new TabPage("按键与旋钮") { Padding = new Padding(12) };
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1,
+                RowCount = 2, AutoScroll = true };
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 165));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            TabPage encoder = BuildEncoderTab();
+            var encoderBox = new GroupBox { Text = "旋钮", Dock = DockStyle.Fill, Padding = new Padding(8) };
+            Control encoderContent = encoder.Controls[0];
+            encoderBox.Controls.Add(encoderContent);
+            layout.Controls.Add(encoderBox, 0, 0);
+            TabPage buttons = BuildButtonsTab();
+            var buttonsBox = new GroupBox { Text = "八个按键与旋钮按压", Dock = DockStyle.Fill,
+                Padding = new Padding(8) };
+            Control buttonContent = buttons.Controls[0];
+            buttonsBox.Controls.Add(buttonContent);
+            layout.Controls.Add(buttonsBox, 0, 1);
+            page.Controls.Add(layout);
+            return page;
+        }
+
+        private TabPage BuildServicesTab()
+        {
+            var page = new TabPage("服务与集成") { Padding = new Padding(10) };
+            _servicesSections = new TabControl { Dock = DockStyle.Fill };
+            _servicesSections.TabPages.Add(BuildApiBalanceTab());
+            _servicesSections.TabPages.Add(BuildMijiaTab());
+            _servicesSections.SelectedIndexChanged += delegate
+            {
+                if (_tabs.SelectedIndex == 3 && _servicesSections.SelectedIndex == 0)
+                    UpdateApiBalanceDetails();
+            };
+            page.Controls.Add(_servicesSections);
+            return page;
+        }
+
+        private TabPage BuildDiagnosticsTab()
+        {
+            var page = new TabPage("诊断与设置") { Padding = new Padding(10) };
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3 };
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 35));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            _diagnosticDeviceHealth = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+                AutoEllipsis = true };
+            _diagnosticProviderHealth = new Label { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+                AutoEllipsis = true };
+            layout.Controls.Add(_diagnosticDeviceHealth, 0, 0);
+            layout.Controls.Add(_diagnosticProviderHealth, 0, 1);
+            _diagnosticsSections = new TabControl { Dock = DockStyle.Fill };
+            _diagnosticsSections.TabPages.Add(BuildMonitorTab());
+            _diagnosticsSections.TabPages.Add(BuildAboutTab());
+            _diagnosticsSections.SelectedIndexChanged += delegate
+            {
+                if (_tabs.SelectedIndex == 4 && _diagnosticsSections.SelectedIndex == 0)
+                    UpdatePcMetrics(_latestPcMetrics ?? _bridge.PcMetrics);
+            };
+            layout.Controls.Add(_diagnosticsSections, 0, 2);
+            page.Controls.Add(layout);
+            return page;
         }
 
         private TabPage BuildMijiaTab()
@@ -183,19 +427,19 @@ namespace CodexToolsHost.UI
         {
             TabPage page = new TabPage("按键");
             var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(12), RowCount = 3 };
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-            layout.Controls.Add(new Label
+            _migrationNotice = new Label
             {
-                Text = "按键单击绑定：btn0~btn7 对应 KEY1~KEY8，enc_ 为编码器按键。动作可随时修改，保存后立即下发。\r\n" +
-                       "提示：启动 CodeX＝从后台唤起 Codex 完整界面；快捷键＝按参数中的组合键，支持 Win+D、Ctrl+Shift+K、\r\n" +
-                       "Win+Alt+Del 等常见写法（Win=Windows 键）。Ctrl+Alt+Del 属系统安全组合键，程序无法注入。",
-                AutoSize = true
-            }, 0, 0);
+                Text = "KEY1–KEY8 与旋钮按压对应下表；保存后立即应用。快捷键参数如 Win+D 或 Ctrl+Shift+K。",
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
+            };
+            layout.Controls.Add(_migrationNotice, 0, 0);
 
             _grid = new DataGridView
             {
+                Name = "buttonGrid",
                 Dock = DockStyle.Fill,
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
@@ -211,8 +455,10 @@ namespace CodexToolsHost.UI
             _grid.Columns.Add("param", "参数");
             _grid.Columns["key"].ReadOnly = true;
             _grid.Columns["evt"].ReadOnly = true;
-            _grid.Columns["action"].FillWeight = 40;
-            _grid.Columns["param"].FillWeight = 40;
+            _grid.Columns["key"].FillWeight = 55;
+            _grid.Columns["evt"].FillWeight = 35;
+            _grid.Columns["action"].FillWeight = 120;
+            _grid.Columns["param"].FillWeight = 90;
             layout.Controls.Add(_grid, 0, 1);
 
             Button reset = new Button { Text = "恢复默认绑定", Dock = DockStyle.Right };
@@ -229,24 +475,28 @@ namespace CodexToolsHost.UI
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 8));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
 
             layout.Controls.Add(new Label { Text = "旋转动作：", TextAlign = ContentAlignment.MiddleRight }, 0, 0);
-            _encRotateAction = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
+            _encRotateAction = new ComboBox { Name = "encoderAction", DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill };
             _encRotateAction.Items.AddRange(EncActionsZh);
             layout.Controls.Add(_encRotateAction, 1, 0);
-            _encRotateParam = new TextBox();
+            _encRotateParam = new TextBox { Dock = DockStyle.Fill };
             layout.Controls.Add(_encRotateParam, 2, 0);
 
             layout.Controls.Add(new Label
             {
-                Text = "旋转参数：音量/滚动填步数（默认 1）；快捷键填组合键如 Ctrl+Alt+Up；\r\n每格（detent）触发一次动作。编码器按键请在“按键”页绑定 enc_click / enc_double / enc_long。",
+                Text = "音量/滚动参数为步数（默认 1）；快捷键填组合键。每格触发一次动作；旋钮按压在下表绑定。",
                 AutoSize = true,
                 ForeColor = Color.Gray
             }, 1, 2);
             layout.SetColumnSpan(layout.GetControlFromPosition(1, 2), 2);
             layout.Controls.Add(new Label
             {
-                Text = "快捷键示例：Win+D 显示桌面、Win+Alt+Del 锁定/安全选项、Ctrl+Alt+Up 等。",
+                Text = "快捷键示例：Win+D、Ctrl+Alt+Up。",
                 AutoSize = true,
                 ForeColor = Color.Gray
             }, 1, 3);
@@ -315,9 +565,12 @@ namespace CodexToolsHost.UI
                 RowCount = 15,
                 AutoScroll = true
             };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+            for (int row = 0; row < 15; row++)
+                layout.RowStyles.Add(new RowStyle(SizeType.Absolute,
+                    row == 5 || row == 9 || row >= 13 ? 62 : 36));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
 
             layout.Controls.Add(new Label { Text = "血条显示来源：", TextAlign = ContentAlignment.MiddleRight }, 0, 0);
             _quotaDisplaySource = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -326,7 +579,7 @@ namespace CodexToolsHost.UI
             layout.Controls.Add(_quotaDisplaySource, 1, 0);
             layout.Controls.Add(new Label
             {
-                Text = "合并悬浮窗与本页使用此选择",
+                Text = "悬浮窗同步使用",
                 ForeColor = Color.Gray,
                 TextAlign = ContentAlignment.MiddleLeft
             }, 2, 0);
@@ -338,7 +591,7 @@ namespace CodexToolsHost.UI
             layout.Controls.Add(_dsProvider, 1, 1);
             layout.Controls.Add(new Label
             {
-                Text = "切换厂商自动填入官方查询地址",
+                Text = "切换后填预设地址",
                 ForeColor = Color.Gray,
                 TextAlign = ContentAlignment.MiddleLeft
             }, 2, 1);
@@ -348,7 +601,7 @@ namespace CodexToolsHost.UI
             layout.Controls.Add(_dsKey, 1, 2);
             layout.Controls.Add(new Label
             {
-                Text = "仅保存在本机配置文件中",
+                Text = "仅保存到本机配置",
                 ForeColor = Color.Gray,
                 TextAlign = ContentAlignment.MiddleLeft
             }, 2, 2);
@@ -387,7 +640,7 @@ namespace CodexToolsHost.UI
             layout.Controls.Add(_goKey, 1, 6);
             layout.Controls.Add(new Label
             {
-                Text = "在 OpenCode 控制台生成的 Go API Key",
+                Text = "在 Go 控制台生成",
                 ForeColor = Color.Gray,
                 TextAlign = ContentAlignment.MiddleLeft
             }, 2, 6);
@@ -465,6 +718,7 @@ namespace CodexToolsHost.UI
                 ForeColor = Color.Gray
             }, 1, 14);
             layout.SetColumnSpan(layout.GetControlFromPosition(1, 14), 2);
+            FillFormColumns(layout);
             page.Controls.Add(layout);
             return page;
         }
@@ -500,164 +754,16 @@ namespace CodexToolsHost.UI
                 _dsUrl.Text = CodexToolsHost.Quota.ApiBalanceProvider.DefaultBaseUrl(CurrentApiProvider());
         }
 
-        private TabPage BuildDeepSeekTab()
-        {
-            TabPage page = new TabPage("DeepSeek 切换");
-            var layout = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 2,
-                RowCount = 8,
-                Padding = new Padding(12)
-            };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-            Label introduction = new Label
-            {
-                Text = "遵循 DeepSeek 官方 Codex 配置流程。配置由 Codex CLI、桌面端和 VS Code 共享；切换后请使用下方按钮重启 ChatGPT APP。\r\n" +
-                       "首次使用请启动官方配置流程；本页不读取或显示 API Key，密钥仅由 .codex 配置目录管理。",
-                AutoSize = true,
-                ForeColor = Color.Gray
-            };
-            layout.Controls.Add(introduction, 0, 0);
-            layout.SetColumnSpan(introduction, 2);
-
-            layout.Controls.Add(new Label { Text = "当前状态：", TextAlign = ContentAlignment.MiddleRight }, 0, 1);
-            _deepSeekStateValue = new Label { AutoSize = true, Text = "--", TextAlign = ContentAlignment.MiddleLeft };
-            layout.Controls.Add(_deepSeekStateValue, 1, 1);
-
-            layout.Controls.Add(new Label { Text = "DeepSeek 模型：", TextAlign = ContentAlignment.MiddleRight }, 0, 2);
-            _deepSeekModelCombo = new ComboBox
-            {
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Width = 220
-            };
-            _deepSeekModelCombo.Items.Add("DeepSeek V4 Flash");
-            _deepSeekModelCombo.Items.Add("DeepSeek V4 Pro");
-            _deepSeekModelCombo.SelectedIndex = 0;
-            layout.Controls.Add(_deepSeekModelCombo, 1, 2);
-
-            layout.Controls.Add(new Label { Text = "Codex 配置目录：", TextAlign = ContentAlignment.MiddleRight }, 0, 3);
-            _deepSeekPathValue = new Label
-            {
-                AutoSize = false,
-                Dock = DockStyle.Fill,
-                Text = "--",
-                AutoEllipsis = true,
-                TextAlign = ContentAlignment.MiddleLeft
-            };
-            layout.Controls.Add(_deepSeekPathValue, 1, 3);
-
-            FlowLayoutPanel buttons = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                AutoSize = false,
-                WrapContents = false,
-                Padding = new Padding(0, 4, 0, 4)
-            };
-            Button activate = new Button { Text = "切换到 DeepSeek", Width = 120, Height = 30 };
-            activate.Click += delegate { ShowDeepSeekResult(_bridge.DeepSeekConfig.ActivateDeepSeek(GetSelectedDeepSeekModel())); };
-            Button restore = new Button { Text = "恢复官方账号", Width = 110, Height = 30 };
-            restore.Click += delegate { ShowDeepSeekResult(_bridge.DeepSeekConfig.RestoreOfficial()); };
-            Button setup = new Button { Text = "启动官方配置流程", Width = 130, Height = 30 };
-            setup.Click += delegate { ShowDeepSeekResult(_bridge.DeepSeekConfig.LaunchOfficialSetup()); };
-            Button restart = new Button { Text = "重启 ChatGPT APP", Width = 130, Height = 30 };
-            restart.Click += delegate { _bridge.RestartChatGpt(); };
-            Button refresh = new Button { Text = "刷新状态", Width = 80, Height = 30 };
-            refresh.Click += delegate { RefreshDeepSeekPage(); };
-            buttons.Controls.Add(activate);
-            buttons.Controls.Add(restore);
-            buttons.Controls.Add(setup);
-            buttons.Controls.Add(restart);
-            buttons.Controls.Add(refresh);
-            layout.Controls.Add(buttons, 0, 4);
-            layout.SetColumnSpan(buttons, 2);
-
-            _deepSeekResult = new Label { AutoSize = true, ForeColor = Color.Gray, Text = "--" };
-            layout.Controls.Add(_deepSeekResult, 0, 5);
-            layout.SetColumnSpan(_deepSeekResult, 2);
-
-            Label note = new Label
-            {
-                Text = "官方配置完成后点击“刷新状态”；恢复官方账号不会删除官方备份，历史会话也不会被本工具删除。",
-                AutoSize = true,
-                ForeColor = Color.Gray
-            };
-            layout.Controls.Add(note, 0, 6);
-            layout.SetColumnSpan(note, 2);
-
-            page.Controls.Add(layout);
-            return page;
-        }
-
-        private string GetSelectedDeepSeekModel()
-        {
-            return _deepSeekModelCombo != null && _deepSeekModelCombo.SelectedIndex == 1
-                ? DeepSeekConfigManager.ProModel : DeepSeekConfigManager.FlashModel;
-        }
-
-        private void ShowDeepSeekResult(DeepSeekActionResult result)
-        {
-            RefreshDeepSeekPage();
-            if (_deepSeekResult != null && result != null)
-                _deepSeekResult.Text = result.Message;
-        }
-
-        private void RefreshDeepSeekPage()
-        {
-            if (_deepSeekStateValue == null) return;
-            try
-            {
-                DeepSeekConfigStatus status = _bridge.DeepSeekConfig.ReadStatus();
-                switch (status.State)
-                {
-                    case DeepSeekConfigState.DeepSeekActive:
-                        _deepSeekStateValue.Text = "DeepSeek API · "
-                            + (status.Model == DeepSeekConfigManager.ProModel ? "V4 Pro" : "V4 Flash");
-                        break;
-                    case DeepSeekConfigState.OfficialActive:
-                        _deepSeekStateValue.Text = "Codex 官方账号（可切换）";
-                        break;
-                    case DeepSeekConfigState.Missing:
-                        _deepSeekStateValue.Text = "尚未配置";
-                        break;
-                    default:
-                        _deepSeekStateValue.Text = "配置不完整";
-                        break;
-                }
-                _deepSeekPathValue.Text = status.CodexHome;
-                if (status.Model == DeepSeekConfigManager.ProModel)
-                    _deepSeekModelCombo.SelectedIndex = 1;
-                else if (status.Model == DeepSeekConfigManager.FlashModel)
-                    _deepSeekModelCombo.SelectedIndex = 0;
-                _deepSeekResult.Text = status.NeedsOfficialSetup
-                    ? "未发现完整的 DeepSeek 快照，请先启动官方配置流程。"
-                    : "配置已就绪，可切换模型或恢复官方账号。";
-            }
-            catch (Exception)
-            {
-                _deepSeekStateValue.Text = "读取失败";
-                _deepSeekPathValue.Text = _bridge.DeepSeekConfig.CodexHome;
-                _deepSeekResult.Text = "读取配置失败，请检查 .codex 权限或文件是否被占用。";
-            }
-        }
-
         private TabPage BuildDisplayTab()
         {
             TabPage page = new TabPage("显示");
-            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, Padding = new Padding(12), RowCount = 13 };
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
-            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3,
+                Padding = new Padding(12), RowCount = 13, AutoScroll = true };
+            for (int row = 0; row < 13; row++)
+                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, row == 12 ? 80 : 38));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 170));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 320));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
 
             layout.Controls.Add(new Label { Text = "默认 OLED 页：", TextAlign = ContentAlignment.MiddleRight }, 0, 0);
             _pageCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
@@ -738,6 +844,7 @@ namespace CodexToolsHost.UI
                 ForeColor = Color.Gray
             }, 1, 12);
             layout.SetColumnSpan(layout.GetControlFromPosition(1, 12), 2);
+            FillFormColumns(layout);
             page.Controls.Add(layout);
             return page;
         }
@@ -750,8 +857,11 @@ namespace CodexToolsHost.UI
                 Dock = DockStyle.Fill,
                 Padding = new Padding(16),
                 ColumnCount = 2,
-                RowCount = 12
+                RowCount = 12,
+                AutoScroll = true
             };
+            for (int row = 0; row < 12; row++)
+                layout.RowStyles.Add(new RowStyle(SizeType.Absolute, row == 10 ? 64 : 38));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
             layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
@@ -811,8 +921,24 @@ namespace CodexToolsHost.UI
                 Text = "当前主机与固件使用 PC_METRICS v3（28 字节单包），包含 GPU、主板温度及双向网速。"
             };
             layout.Controls.Add(protocol, 1, 11);
+            FillFormColumns(layout);
             page.Controls.Add(layout);
             return page;
+        }
+
+        private static void FillFormColumns(TableLayoutPanel layout)
+        {
+            foreach (Control child in layout.Controls)
+            {
+                int column = layout.GetColumn(child);
+                if (column == 0 && child is Label)
+                    child.Dock = DockStyle.Fill;
+                else if (column == 2 && child is Label)
+                    child.Dock = DockStyle.Fill;
+                else if (column == 1 && (child is TextBox || child is ComboBox
+                    || child is NumericUpDown))
+                    child.Dock = DockStyle.Fill;
+            }
         }
 
         private static Label CreateMonitorValueLabel()
@@ -827,7 +953,8 @@ namespace CodexToolsHost.UI
             {
                 Dock = DockStyle.Fill,
                 Padding = new Padding(16),
-                Text = "CodeX Tools Host（单文件便携版，.NET Framework 4.8）\r\n\r\n" +
+                Text = "CodeX Tools Host " + typeof(SettingsForm).Assembly.GetName().Version.ToString(3)
+                    + "（单文件便携版，.NET Framework 4.8）\r\n\r\n" +
                        "功能：\r\n" +
                        "• 读取 Codex 运行状态与额度（codex app-server）\r\n" +
                        "• 查询各家 API 账户余额（DeepSeek/硅基流动/OpenRouter/自定义地址）\r\n" +
@@ -996,20 +1123,101 @@ namespace CodexToolsHost.UI
             _rgbStatusError.Text = _config.Rgb.StatusError;
             _rgbStatusComplete.Text = _config.Rgb.StatusComplete;
             _rgbStatusOffline.Text = _config.Rgb.StatusOffline;
-            RefreshDeepSeekPage();
-            UpdatePcMetrics(_bridge.PcMetrics);
-            UpdateOpenCodeGoDetails();
+            if (_config.RemovedSwitchBindingMigrated)
+                _migrationNotice.Text = "旧版 DeepSeek/官方账号切换绑定已停用并改为“无”；请检查按键与旋钮设置。";
+            _latestPcMetrics = _bridge.PcMetrics;
+            UpdateOverview();
+        }
+
+        private void OnCodexChanged()
+        {
+            RunOnUiThread(delegate { if (_tabs.SelectedIndex == 0) UpdateOverview(); });
+        }
+
+        private static string FormatQuotaWindow(string label, int? minutes, int? remaining,
+            DateTimeOffset? resetsAt)
+        {
+            if (minutes.HasValue && minutes.Value > 0)
+                label = minutes.Value < 60 ? minutes.Value + " 分钟窗口"
+                    : minutes.Value % 1440 == 0 ? minutes.Value / 1440 + " 天窗口"
+                    : minutes.Value % 60 == 0 ? minutes.Value / 60 + " 小时窗口"
+                    : minutes.Value + " 分钟窗口";
+            string amount = remaining.HasValue ? remaining.Value + "% 剩余" : "暂无数据";
+            string reset = resetsAt.HasValue
+                ? " · 重置 " + resetsAt.Value.ToLocalTime().ToString("M月d日 HH:mm") : "";
+            return label + "：" + amount + reset;
+        }
+
+        private void UpdateOverview()
+        {
+            if (_codexQuotaStatus == null) return;
+            QuotaSnapshot quota = _bridge.Codex.Quota ?? QuotaSnapshot.EmptyStale();
+            string observed = quota.ObservedAt == DateTimeOffset.MinValue
+                ? "尚无采样" : "采样于 " + quota.ObservedAt.ToLocalTime().ToString("M月d日 HH:mm:ss");
+            _codexQuotaStatus.Text = (quota.IsStale ? "数据已过期 · " : "数据有效 · ") + observed
+                + (string.IsNullOrEmpty(quota.LastError) ? "" : " · " + quota.LastError);
+            _codexPrimaryValue.Text = FormatQuotaWindow("主窗口", quota.PrimaryWindowMinutes,
+                quota.PrimaryRemainingPercent, quota.PrimaryResetsAt);
+            _codexSecondaryValue.Text = FormatQuotaWindow("次窗口", quota.SecondaryWindowMinutes,
+                quota.SecondaryRemainingPercent, quota.SecondaryResetsAt);
+            _overviewDeviceHealth.Text = _bridge.IsDeviceConnected
+                ? _bridge.DevicePort + " 已连接" : "未连接，等待自动重连";
+            _overviewProviderHealth.Text = "API 余额：" + ApiBalanceHealth()
+                + "\r\nOpenCode Go：" + OpenCodeGoHealth();
+            _overviewPcSummary.Text = FormatOverviewPcSummary(
+                _latestPcMetrics ?? _bridge.PcMetrics);
+        }
+
+        private string ApiBalanceHealth()
+        {
+            if (string.IsNullOrWhiteSpace(_config.DeepSeekApiKey)) return "未启用";
+            return _bridge.DeepSeek.IsStale ? "数据已过期" : "正常";
+        }
+
+        private string OpenCodeGoHealth()
+        {
+            if (string.IsNullOrWhiteSpace(_config.OpenCodeGoApiKey)) return "未启用";
+            return (_bridge.OpenCodeGo.Quota ?? OpenCodeGoQuotaSnapshot.EmptyStale()).IsStale
+                ? "数据已过期" : "正常";
+        }
+
+        private static string FormatOverviewPcSummary(PcMetricsSnapshot snapshot)
+        {
+            if (snapshot == null) return "尚无 PC 采样";
+            string cpu = snapshot.CpuLoadPercent >= 0 ? snapshot.CpuLoadPercent + "%" : "--";
+            string gpu = snapshot.GpuLoadPercent >= 0 ? snapshot.GpuLoadPercent + "%" : "--";
+            string memory = snapshot.MemoryUsedPercent >= 0 ? snapshot.MemoryUsedPercent + "%" : "--";
+            string cpuTemperature = snapshot.CpuTemperatureC.HasValue
+                ? snapshot.CpuTemperatureC.Value.ToString("0.0") + "°C" : "--";
+            string gpuTemperature = snapshot.GpuTemperatureC.HasValue
+                ? snapshot.GpuTemperatureC.Value.ToString("0.0") + "°C" : "--";
+            string network = QuotaHudPresentation.FormatNetworkSpeed(
+                snapshot.NetworkSpeedAvailable, snapshot.NetworkDownloadKiBPerSecond,
+                snapshot.NetworkUploadKiBPerSecond);
+            string sampled = snapshot.SampledAtUtc == default(DateTimeOffset)
+                ? "尚无采样" : snapshot.SampledAtUtc.ToLocalTime().ToString("HH:mm:ss");
+            return "CPU " + cpu + "    GPU " + gpu + "    内存 " + memory
+                + "\r\nCPU 温度 " + cpuTemperature + "    GPU 温度 " + gpuTemperature
+                + "\r\n网络 " + network + "    采样 " + sampled
+                + (snapshot.IsStale ? "（已过期）" : "");
+        }
+
+        private void UpdateDiagnostics()
+        {
+            if (_diagnosticDeviceHealth == null || _tabs.SelectedIndex != 4) return;
+            _diagnosticDeviceHealth.Text = _bridge.IsDeviceConnected
+                ? "设备链路：" + _bridge.DevicePort + " 已连接" : "设备链路：未连接（自动重连中）";
+            QuotaSnapshot quota = _bridge.Codex.Quota ?? QuotaSnapshot.EmptyStale();
+            string quotaHealth = quota.IsStale ? "Codex 配额：数据已过期" : "Codex 配额：数据有效";
+            _diagnosticProviderHealth.Text = quotaHealth
+                + (string.IsNullOrEmpty(quota.LastError) ? "" : "（" + quota.LastError + "）")
+                + "；API 余额：" + ApiBalanceHealth()
+                + "；OpenCode Go：" + OpenCodeGoHealth();
         }
 
         private void OnDeepSeekChanged()
         {
-            RunOnUiThread(delegate
-            {
-                if (_dsTestResult == null) return;
-                _dsTestResult.Text = string.IsNullOrEmpty(_bridge.DeepSeek.LastError)
-                    ? "最近查询无错误"
-                    : "最近错误: " + _bridge.DeepSeek.LastError;
-            });
+            RunOnUiThread(UpdateApiBalanceDetails);
         }
 
         private void OnOpenCodeGoChanged()
@@ -1017,9 +1225,19 @@ namespace CodexToolsHost.UI
             RunOnUiThread(UpdateOpenCodeGoDetails);
         }
 
+        private void UpdateApiBalanceDetails()
+        {
+            if (_dsTestResult == null || IsDisposed || _tabs.SelectedIndex != 3
+                || _servicesSections.SelectedIndex != 0) return;
+            _dsTestResult.Text = string.IsNullOrEmpty(_bridge.DeepSeek.LastError)
+                ? "最近查询无错误" : "最近错误: " + _bridge.DeepSeek.LastError;
+            UpdateOpenCodeGoDetails();
+        }
+
         private void UpdateOpenCodeGoDetails()
         {
-            if (_goRollingValue == null || IsDisposed) return;
+            if (_goRollingValue == null || IsDisposed || _tabs.SelectedIndex != 3
+                || _servicesSections.SelectedIndex != 0) return;
             OpenCodeGoQuotaSnapshot snapshot = _bridge.OpenCodeGo.Quota
                 ?? OpenCodeGoQuotaSnapshot.EmptyStale();
             DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -1068,7 +1286,14 @@ namespace CodexToolsHost.UI
                 if (IsDisposed || _pcCpuValue == null) return;
                 if (InvokeRequired)
                     BeginInvoke(new Action(delegate { SafeUpdatePcMetrics(snapshot); }));
-                else UpdatePcMetrics(snapshot);
+                else
+                {
+                    _latestPcMetrics = snapshot;
+                    if (_tabs.SelectedIndex == 0 && _overviewPcSummary != null)
+                        _overviewPcSummary.Text = FormatOverviewPcSummary(snapshot);
+                    if (_tabs.SelectedIndex == 4 && _diagnosticsSections.SelectedIndex == 0)
+                        UpdatePcMetrics(snapshot);
+                }
             }
             catch (Exception) { }
         }
@@ -1201,6 +1426,7 @@ namespace CodexToolsHost.UI
         {
             _bridge.StatusChanged -= OnBridgeStatusChanged;
             _bridge.PcMetricsChanged -= SafeUpdatePcMetrics;
+            _bridge.Codex.Changed -= OnCodexChanged;
             _bridge.DeepSeek.Changed -= OnDeepSeekChanged;
             _bridge.OpenCodeGo.Changed -= OnOpenCodeGoChanged;
             _goDisplayTimer.Stop();

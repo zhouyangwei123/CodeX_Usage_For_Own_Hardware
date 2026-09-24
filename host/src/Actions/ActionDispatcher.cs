@@ -11,7 +11,6 @@ namespace CodexToolsHost.Actions
         void SetRgbMode(string mode);
         void RefreshQuota();
         void ShowSettings();
-        void ToggleDeepSeek();
         void RestartChatGpt();
         void RunMijiaShortcut(int index);
         void Toast(string message);
@@ -111,9 +110,6 @@ namespace CodexToolsHost.Actions
                     break;
                 case "showsettings":
                     host.ShowSettings();
-                    break;
-                case "toggledeepseek":
-                    host.ToggleDeepSeek();
                     break;
                 case "mijia1": host.RunMijiaShortcut(0); break;
                 case "mijia2": host.RunMijiaShortcut(1); break;

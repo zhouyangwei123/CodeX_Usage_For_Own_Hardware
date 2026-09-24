@@ -175,7 +175,7 @@ namespace CodexToolsHost.Tests
                     new MockDeviceLink { EmitInfoOnConnect = false },
                     new FakeCodexSource(), null, new FakeDeepSeekSource(),
                     new PcMonitorService(new WindowsPcMetricsProvider(), 2000),
-                    null, null, new FakeOpenCodeGoSource());
+                    null, new FakeOpenCodeGoSource());
                 form = new SettingsForm(config, bridge);
                 ComboBox source = settings.GetField("_quotaDisplaySource",
                     BindingFlags.Instance | BindingFlags.NonPublic).GetValue(form) as ComboBox;
@@ -256,7 +256,7 @@ namespace CodexToolsHost.Tests
                     new MockDeviceLink { EmitInfoOnConnect = false },
                     new FakeCodexSource(), null, deepSeek,
                     new PcMonitorService(new WindowsPcMetricsProvider(), 2000),
-                    null, null, openCodeGo);
+                    null, openCodeGo);
                 bridge.Start();
                 bridge.RefreshQuota();
                 bool deepSeekSelected = deepSeek.StartCalls == 1

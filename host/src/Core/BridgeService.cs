@@ -13,7 +13,7 @@ using CodexToolsHost.Quota;
 
 namespace CodexToolsHost.Core
 {
-    /// <summary>桥接服务：串口设备 <-> Codex/DeepSeek 数据源，执行按键/编码器动作</summary>
+    /// <summary>桥接服务：串口设备与配额数据源，执行按键/编码器动作</summary>
     public sealed class BridgeService : IDisposable, IHostService
     {
         private readonly AppConfig _config;
@@ -23,7 +23,6 @@ namespace CodexToolsHost.Core
         private readonly IDeepSeekSource _deepseek;
         private readonly IOpenCodeGoQuotaSource _openCodeGo;
         private readonly PcMonitorService _pcMonitor;
-        private readonly DeepSeekConfigManager _deepSeekConfig;
         private readonly IChatGptRestartService _chatGptRestart;
         private readonly MijiaService _mijia;
         private Timer _pushTimer;
@@ -52,7 +51,7 @@ namespace CodexToolsHost.Core
                    new DesktopLogStatusMonitor(),
                    new ApiBalanceProvider(config.DeepSeekApiKey, config.DeepSeekBaseUrl,
                                           config.DeepSeekRefreshSeconds, config.ApiBalanceProvider),
-                   new PcMonitorService(new WindowsPcMetricsProvider(), 2000), null, null,
+                   new PcMonitorService(new WindowsPcMetricsProvider(), 2000), null,
                    new OpenCodeGoQuotaProvider(config.OpenCodeGoApiKey,
                        config.OpenCodeGoRefreshSeconds))
         {
@@ -83,26 +82,15 @@ namespace CodexToolsHost.Core
         internal BridgeService(AppConfig config, IDeviceLink link,
                                ICodexStatusSource codex, DesktopLogStatusMonitor status,
                                IDeepSeekSource deepseek, PcMonitorService pcMonitor,
-                               DeepSeekConfigManager deepSeekConfig)
-            : this(config, link, codex, status, deepseek, pcMonitor,
-                   deepSeekConfig, null)
-        {
-        }
-
-        internal BridgeService(AppConfig config, IDeviceLink link,
-                               ICodexStatusSource codex, DesktopLogStatusMonitor status,
-                               IDeepSeekSource deepseek, PcMonitorService pcMonitor,
-                               DeepSeekConfigManager deepSeekConfig,
                                IChatGptRestartService chatGptRestart)
             : this(config, link, codex, status, deepseek, pcMonitor,
-                   deepSeekConfig, chatGptRestart, null)
+                   chatGptRestart, null)
         {
         }
 
         internal BridgeService(AppConfig config, IDeviceLink link,
                                ICodexStatusSource codex, DesktopLogStatusMonitor status,
                                IDeepSeekSource deepseek, PcMonitorService pcMonitor,
-                               DeepSeekConfigManager deepSeekConfig,
                                IChatGptRestartService chatGptRestart,
                                IOpenCodeGoQuotaSource openCodeGo)
         {
@@ -115,7 +103,6 @@ namespace CodexToolsHost.Core
             _openCodeGo = openCodeGo ?? new OpenCodeGoQuotaProvider(
                 config.OpenCodeGoApiKey, config.OpenCodeGoRefreshSeconds);
             _pcMonitor = pcMonitor;
-            _deepSeekConfig = deepSeekConfig ?? new DeepSeekConfigManager();
             _chatGptRestart = chatGptRestart ?? new ChatGptRestartService();
             _mijia = new MijiaService(config.Mijia);
             _oledPage = config.DefaultOledPage;
@@ -128,7 +115,6 @@ namespace CodexToolsHost.Core
         public ICodexStatusSource Codex { get { return _codex; } }
         public IDeepSeekSource DeepSeek { get { return _deepseek; } }
         public IOpenCodeGoQuotaSource OpenCodeGo { get { return _openCodeGo; } }
-        public DeepSeekConfigManager DeepSeekConfig { get { return _deepSeekConfig; } }
         public PcMetricsSnapshot PcMetrics { get { return _pcMonitor.Current; } }
         public MijiaService Mijia { get { return _mijia; } }
 
@@ -241,13 +227,14 @@ namespace CodexToolsHost.Core
         private void SendStatus()
         {
             if (!_link.IsConnected) return;
+            QuotaSnapshot quota = _codex.Quota ?? QuotaSnapshot.EmptyStale();
             var payload = new List<byte>();
             payload.Add((byte)Math.Max(0, Math.Min(5, _status == null ? _codex.State : _status.State)));
             payload.Add(_deepseek.Unlimited ? (byte)0x01 : (byte)0); /* flags bit0: API 无限额度 */
-            payload.Add((byte)(_codex.Quota.PrimaryRemainingPercent.HasValue ? Math.Max(0, Math.Min(100, _codex.Quota.PrimaryRemainingPercent.Value)) : 255));
-            payload.Add((byte)(_codex.Quota.SecondaryRemainingPercent.HasValue ? Math.Max(0, Math.Min(100, _codex.Quota.SecondaryRemainingPercent.Value)) : 255));
-            payload.AddRange(BitConverter.GetBytes((uint)ToUnix(_codex.Quota.PrimaryResetsAt)));
-            payload.AddRange(BitConverter.GetBytes((uint)ToUnix(_codex.Quota.SecondaryResetsAt)));
+            payload.Add((byte)(quota.PrimaryRemainingPercent.HasValue ? Math.Max(0, Math.Min(100, quota.PrimaryRemainingPercent.Value)) : 255));
+            payload.Add((byte)(quota.SecondaryRemainingPercent.HasValue ? Math.Max(0, Math.Min(100, quota.SecondaryRemainingPercent.Value)) : 255));
+            payload.AddRange(BitConverter.GetBytes((uint)ToUnix(quota.PrimaryResetsAt)));
+            payload.AddRange(BitConverter.GetBytes((uint)ToUnix(quota.SecondaryResetsAt)));
             payload.Add((byte)(_deepseek.Available && !_deepseek.IsStale ? 1 : 0));
             payload.AddRange(BitConverter.GetBytes((uint)Math.Max(0, _deepseek.BalanceCents)));
             string currencyName = _deepseek.Currency ?? "CNY";
@@ -406,14 +393,6 @@ namespace CodexToolsHost.Core
         {
             var handler = ShowSettingsRequested;
             if (handler != null) handler();
-        }
-
-        public void ToggleDeepSeek()
-        {
-            DeepSeekActionResult result = _deepSeekConfig.Toggle();
-            if (result == null) return;
-            Toast(result.Message);
-            RaiseStatus(result.Message);
         }
 
         public void RestartChatGpt()

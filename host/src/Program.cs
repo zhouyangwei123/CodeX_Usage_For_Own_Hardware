@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -30,9 +30,8 @@ namespace CodexToolsHost
             if (probeOutput != null) return RunProbe(probeOutput);
             string selfCheckOutput = ReadArg(args, "--selfcheck-output");
             if (selfCheckOutput != null) return RunSelfCheck(selfCheckOutput);
-            string deepSeekSelfCheckOutput = ReadArg(args, "--deepseek-selfcheck-output");
-            if (deepSeekSelfCheckOutput != null)
-                return RunDeepSeekSelfCheck(deepSeekSelfCheckOutput);
+            string uiBatchCheckOutput = ReadArg(args, "--ui-batch-selfcheck-output");
+            if (uiBatchCheckOutput != null) return UiBatchOneSelfChecks.Run(uiBatchCheckOutput);
             string chatGptRestartSelfCheckOutput = ReadArg(args,
                 "--chatgpt-restart-selfcheck-output");
             if (chatGptRestartSelfCheckOutput != null)
@@ -371,205 +370,6 @@ namespace CodexToolsHost
             return exitCode;
         }
 
-        private static int RunDeepSeekSelfCheck(string outputPath)
-        {
-            var result = new Dictionary<string, object>();
-            int exitCode = 0;
-            string fixtureRoot = Path.Combine(Path.GetTempPath(),
-                "CodexToolsHostDeepSeekSelfCheck-" + Guid.NewGuid().ToString("N"));
-            string codexHome = Path.Combine(fixtureRoot, "profile with spaces", ".codex");
-            try
-            {
-                string missingHome = Path.Combine(fixtureRoot, "empty profile", ".codex");
-                DeepSeekConfigStatus missing = new DeepSeekConfigManager(missingHome).ReadStatus();
-                bool missingNeedsSetup = missing.NeedsOfficialSetup
-                    && missing.State == DeepSeekConfigState.Missing;
-                result["missingNeedsSetup"] = missingNeedsSetup;
-                if (!missingNeedsSetup) exitCode = 2;
-
-                string officialConfig =
-                    "model = \"gpt-5.6-sol\"\r\n" +
-                    "model_provider = \"codex\"\r\n" +
-                    "preferred_auth_method = \"oauth\"\r\n" +
-                    "forced_login_method = \"chatgpt\"\r\n" +
-                    "model_reasoning_effort = \"xhigh\"\r\n" +
-                    "model_catalog_json = \"~/.codex/models.json\"\r\n\r\n" +
-                    "[model_providers.codex]\r\n" +
-                    "name = \"codex\"\r\n" +
-                    "base_url = \"https://chatgpt.com/backend-api/codex\"\r\n";
-                string fixtureToken = new string(new[] { 's', 'k', '-', 't', 'e', 's', 't' });
-                string deepSeekConfig =
-                    "model = \"deepseek-v4-flash\"\r\n" +
-                    "model_provider = \"deepseek\"\r\n" +
-                    "preferred_auth_method = \"apikey\"\r\n" +
-                    "forced_login_method = \"api\"\r\n" +
-                    "model_reasoning_effort = \"high\"\r\n" +
-                    "model_catalog_json = \"~/.codex/models.json\"\r\n\r\n" +
-                    "[model_providers.deepseek]\r\n" +
-                    "name = \"deepseek\"\r\n" +
-                    "base_url = \"https://api.deepseek.com/\"\r\n" +
-                    "wire_api = \"responses\"\r\n" +
-                    "experimental_bearer_token = \"" + fixtureToken + "\"\r\n";
-                string models =
-                    "{\"models\":[{\"slug\":\"deepseek-v4-flash\"},{\"slug\":\"deepseek-v4-pro\"}]}";
-
-                string invalidOfficialHome = Path.Combine(fixtureRoot, "invalid official", ".codex");
-                string invalidManaged = Path.Combine(invalidOfficialHome, "codex-tools-deepseek");
-                Directory.CreateDirectory(invalidManaged);
-                File.WriteAllText(Path.Combine(invalidOfficialHome, "config.toml"),
-                    "not a valid codex config\r\n", new UTF8Encoding(false));
-                File.WriteAllText(Path.Combine(invalidManaged, "config.deepseek.toml"),
-                    deepSeekConfig, new UTF8Encoding(false));
-                File.WriteAllText(Path.Combine(invalidManaged, "models.deepseek.json"),
-                    models, new UTF8Encoding(false));
-                DeepSeekConfigStatus invalidOfficial = new DeepSeekConfigManager(invalidOfficialHome)
-                    .ReadStatus();
-                bool invalidOfficialRejected = invalidOfficial.State == DeepSeekConfigState.Incomplete
-                    && invalidOfficial.NeedsOfficialSetup;
-                result["invalidOfficialRejected"] = invalidOfficialRejected;
-                if (!invalidOfficialRejected) exitCode = 3;
-
-                Directory.CreateDirectory(Path.Combine(codexHome, "backup-deepseek"));
-                File.WriteAllText(Path.Combine(codexHome, "backup-deepseek", "config.toml"),
-                    officialConfig, new UTF8Encoding(false));
-                File.WriteAllText(Path.Combine(codexHome, "config.toml"),
-                    deepSeekConfig, new UTF8Encoding(false));
-                File.WriteAllText(Path.Combine(codexHome, "models.json"),
-                    models, new UTF8Encoding(false));
-
-                DeepSeekConfigManager manager = new DeepSeekConfigManager(codexHome);
-                DeepSeekConfigStatus active = manager.ReadStatus();
-                bool activeDeepSeekOk = active.IsDeepSeekActive
-                    && active.Model == DeepSeekConfigManager.FlashModel;
-                result["activeDeepSeekOk"] = activeDeepSeekOk;
-                if (!activeDeepSeekOk) exitCode = 4;
-
-                DeepSeekActionResult restored = manager.RestoreOfficial();
-                string restoredConfig = File.ReadAllText(Path.Combine(codexHome, "config.toml"),
-                    Encoding.UTF8);
-                bool restoreOfficialOk = restored.Success
-                    && !restoredConfig.Contains("experimental_bearer_token")
-                    && new DeepSeekConfigManager(codexHome).ReadStatus().State
-                        == DeepSeekConfigState.OfficialActive;
-                result["restoreOfficialOk"] = restoreOfficialOk;
-                if (!restoreOfficialOk) exitCode = 5;
-
-                DeepSeekActionResult pro = manager.ActivateDeepSeek(DeepSeekConfigManager.ProModel);
-                string proConfig = File.ReadAllText(Path.Combine(codexHome, "config.toml"),
-                    Encoding.UTF8);
-                bool proSwitchOk = pro.Success
-                    && proConfig.Contains("model = \"deepseek-v4-pro\"")
-                    && proConfig.Contains("experimental_bearer_token = \"" + fixtureToken + "\"")
-                    && new DeepSeekConfigManager(codexHome).ReadStatus().Model
-                        == DeepSeekConfigManager.ProModel;
-                result["proSwitchOk"] = proSwitchOk;
-                if (!proSwitchOk) exitCode = 6;
-
-                string invalidBefore = proConfig;
-                DeepSeekActionResult invalid = manager.ActivateDeepSeek("deepseek-v4-unknown");
-                bool invalidModelRejected = !invalid.Success
-                    && File.ReadAllText(Path.Combine(codexHome, "config.toml"), Encoding.UTF8)
-                        == invalidBefore;
-                result["invalidModelRejected"] = invalidModelRejected;
-                if (!invalidModelRejected) exitCode = 7;
-
-                DeepSeekActionResult toggleToOfficial = manager.Toggle();
-                DeepSeekActionResult toggleToDeepSeek = manager.Toggle();
-                DeepSeekConfigStatus roundtrip = manager.ReadStatus();
-                bool toggleRoundtripOk = toggleToOfficial.Success
-                    && toggleToDeepSeek.Success
-                    && roundtrip.IsDeepSeekActive
-                    && roundtrip.Model == DeepSeekConfigManager.ProModel;
-                result["toggleRoundtripOk"] = toggleRoundtripOk;
-                if (!toggleRoundtripOk) exitCode = 8;
-
-                bool portablePathOk = manager.CodexHome == Path.GetFullPath(codexHome)
-                    && manager.CodexHome.IndexOf("profile with spaces",
-                        StringComparison.OrdinalIgnoreCase) >= 0;
-                result["portablePathOk"] = portablePathOk;
-                if (!portablePathOk) exitCode = 9;
-
-                string previousCodexHome = Environment.GetEnvironmentVariable("CODEX_HOME");
-                bool envPathOk;
-                try
-                {
-                    Environment.SetEnvironmentVariable("CODEX_HOME", codexHome);
-                    envPathOk = DeepSeekConfigManager.ResolveCodexHome()
-                        == Path.GetFullPath(codexHome);
-                }
-                finally
-                {
-                    Environment.SetEnvironmentVariable("CODEX_HOME", previousCodexHome);
-                }
-                result["envPathOk"] = envPathOk;
-                if (!envPathOk) exitCode = 9;
-
-                bool uiLayoutConstructionOk = false;
-                string uiHome = Path.Combine(fixtureRoot, "ui profile", ".codex");
-                AppConfig uiConfig = AppConfig.CreateDefault();
-                using (MockDeviceLink uiMock = new MockDeviceLink { EmitInfoOnConnect = false })
-                using (BridgeService uiBridge = new BridgeService(
-                    uiConfig, uiMock, new FakeCodexSource(), null,
-                    new FakeDeepSeekSource(),
-                    new PcMonitorService(new WindowsPcMetricsProvider(), 2000),
-                    new DeepSeekConfigManager(uiHome)))
-                using (SettingsForm form = new SettingsForm(uiConfig, uiBridge))
-                {
-                    var tabsField = typeof(SettingsForm).GetField("_tabs",
-                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-                    var serialField = typeof(SettingsForm).GetField("_serialPortCombo",
-                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-                    var modelField = typeof(SettingsForm).GetField("_deepSeekModelCombo",
-                        System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-                    TabControl tabs = tabsField == null ? null : tabsField.GetValue(form) as TabControl;
-                    ComboBox serial = serialField == null ? null : serialField.GetValue(form) as ComboBox;
-                    ComboBox model = modelField == null ? null : modelField.GetValue(form) as ComboBox;
-                    bool hasDeepSeekTab = false;
-                    if (tabs != null)
-                    {
-                        foreach (TabPage tab in tabs.TabPages)
-                            if (tab.Text == "DeepSeek 切换") hasDeepSeekTab = true;
-                    }
-                    uiLayoutConstructionOk = tabs != null && tabs.TabPages.Count == 8
-                        && hasDeepSeekTab && serial != null && serial.Items.Count >= 1
-                        && model != null && model.Items.Count == 2;
-                }
-                result["uiLayoutConstructionOk"] = uiLayoutConstructionOk;
-                if (!uiLayoutConstructionOk) exitCode = 10;
-
-                string serializedBeforeSecretCheck = new JavaScriptSerializer().Serialize(result);
-                bool noSecretLeakOk = serializedBeforeSecretCheck.IndexOf(
-                    fixtureToken, StringComparison.OrdinalIgnoreCase) < 0
-                    && restored.Message.IndexOf(fixtureToken, StringComparison.OrdinalIgnoreCase) < 0
-                    && pro.Message.IndexOf(fixtureToken, StringComparison.OrdinalIgnoreCase) < 0
-                    && invalid.Message.IndexOf(fixtureToken, StringComparison.OrdinalIgnoreCase) < 0
-                    && toggleToOfficial.Message.IndexOf(fixtureToken, StringComparison.OrdinalIgnoreCase) < 0
-                    && toggleToDeepSeek.Message.IndexOf(fixtureToken, StringComparison.OrdinalIgnoreCase) < 0;
-                result["noSecretLeakOk"] = noSecretLeakOk;
-                if (!noSecretLeakOk) exitCode = 11;
-            }
-            catch (Exception ex)
-            {
-                result["error"] = ex.GetType().Name + ": " + ex.Message;
-                exitCode = 10;
-            }
-            finally
-            {
-                if (Directory.Exists(fixtureRoot))
-                {
-                    try { Directory.Delete(fixtureRoot, true); }
-                    catch (Exception) { }
-                }
-            }
-
-            string outputDirectory = Path.GetDirectoryName(Path.GetFullPath(outputPath));
-            Directory.CreateDirectory(outputDirectory);
-            File.WriteAllText(outputPath, new JavaScriptSerializer().Serialize(result),
-                new UTF8Encoding(false));
-            Environment.Exit(exitCode);
-            return exitCode;
-        }
-
         private static bool CheckCleanReleaseConfigPath()
         {
             string releaseConfigDir = Path.Combine(Path.GetTempPath(),
@@ -712,7 +512,7 @@ namespace CodexToolsHost
             using (BridgeService restartBridge = new BridgeService(
                 restartConfig, restartLink, new FakeCodexSource(), null,
                 new FakeDeepSeekSource(),
-                new PcMonitorService(new WindowsPcMetricsProvider(), 2000), null,
+                new PcMonitorService(new WindowsPcMetricsProvider(), 2000),
                 bridgeRestart))
             {
                 restartBridge.RestartChatGpt();
@@ -1198,7 +998,6 @@ namespace CodexToolsHost
             public void SetRgbMode(string mode) { }
             public void RefreshQuota() { }
             public void ShowSettings() { }
-            public void ToggleDeepSeek() { }
             public void RestartChatGpt() { RestartCalls++; }
             public void RunMijiaShortcut(int index) { }
             public void Toast(string message) { }

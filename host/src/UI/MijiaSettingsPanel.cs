@@ -65,41 +65,45 @@ namespace CodexToolsHost.UI
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-            var configuration = new FlowLayoutPanel
-            {
-                AutoSize = true,
-                Dock = DockStyle.Fill,
-                WrapContents = true
-            };
-            configuration.Controls.Add(new Label { Text = "环境：", AutoSize = true,
+            var configuration = new TableLayoutPanel { AutoSize = true,
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+            configuration.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            configuration.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            var programRow = new FlowLayoutPanel { AutoSize = true,
+                Dock = DockStyle.Fill, WrapContents = false };
+            programRow.Controls.Add(new Label { Text = "环境：", AutoSize = true,
                 Padding = new Padding(0, 6, 0, 0) });
-            _environment.AutoSize = true;
+            _environment.AutoSize = false;
+            _environment.Width = 175;
+            _environment.Height = 28;
+            _environment.AutoEllipsis = true;
+            _environment.TextAlign = ContentAlignment.MiddleLeft;
             _environment.ForeColor = Color.DarkSlateGray;
-            _environment.Padding = new Padding(0, 6, 14, 0);
-            configuration.Controls.Add(_environment);
-            configuration.Controls.Add(new Label { Text = "程序：", AutoSize = true,
+            programRow.Controls.Add(_environment);
+            programRow.Controls.Add(new Label { Text = "程序：", AutoSize = true,
                 Padding = new Padding(0, 6, 0, 0) });
             _executablePath.Width = 190;
-            configuration.Controls.Add(_executablePath);
+            programRow.Controls.Add(_executablePath);
             Button pickExecutable = new Button { Text = "选择程序", AutoSize = true };
             pickExecutable.Click += delegate { SelectFile(_executablePath, "mijiaAPI.exe|mijiaAPI.exe|程序|*.exe"); };
-            configuration.Controls.Add(pickExecutable);
-            configuration.Controls.Add(new Label { Text = "认证：", AutoSize = true,
-                Padding = new Padding(8, 6, 0, 0) });
+            programRow.Controls.Add(pickExecutable);
+            var authRow = new FlowLayoutPanel { AutoSize = true,
+                Dock = DockStyle.Fill, WrapContents = false };
+            authRow.Controls.Add(new Label { Text = "认证：", AutoSize = true,
+                Padding = new Padding(0, 6, 0, 0) });
             _authPath.Width = 160;
-            configuration.Controls.Add(_authPath);
+            authRow.Controls.Add(_authPath);
             Button pickAuth = new Button { Text = "选择认证文件", AutoSize = true };
             pickAuth.Click += delegate { SelectFile(_authPath, "JSON 文件|*.json|所有文件|*.*"); };
-            configuration.Controls.Add(pickAuth);
+            authRow.Controls.Add(pickAuth);
+            configuration.Controls.Add(programRow, 0, 0);
+            configuration.Controls.Add(authRow, 0, 1);
 
-            var split = new SplitContainer
-            {
-                Dock = DockStyle.Fill,
-                FixedPanel = FixedPanel.Panel1,
-                SplitterDistance = 245
-            };
-            split.Panel1.Controls.Add(BuildQrPanel());
-            split.Panel2.Controls.Add(BuildShortcutsPanel());
+            var split = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 };
+            split.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240));
+            split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            split.Controls.Add(BuildQrPanel(), 0, 0);
+            split.Controls.Add(BuildShortcutsPanel(), 1, 0);
 
             _status.AutoSize = true;
             _status.ForeColor = Color.DimGray;
@@ -164,8 +168,9 @@ namespace CodexToolsHost.UI
             refreshBar.Controls.Add(_refreshMinutes);
             refreshBar.Controls.Add(_refreshScenesButton);
 
-            var rows = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4,
-                RowCount = MijiaSettings.ShortcutCount, AutoScroll = true };
+            var rows = new TableLayoutPanel { Dock = DockStyle.Top, ColumnCount = 4,
+                RowCount = MijiaSettings.ShortcutCount,
+                Height = MijiaSettings.ShortcutCount * 29 + 4 };
             rows.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 22));
             rows.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35));
             rows.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 65));
@@ -201,7 +206,9 @@ namespace CodexToolsHost.UI
                 rows.Controls.Add(execute, 3, index);
             }
             root.Controls.Add(refreshBar, 0, 0);
-            root.Controls.Add(rows, 0, 1);
+            var rowScroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+            rowScroll.Controls.Add(rows);
+            root.Controls.Add(rowScroll, 0, 1);
             group.Controls.Add(root);
             return group;
         }
