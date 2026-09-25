@@ -290,7 +290,7 @@ namespace CodexToolsHost.Tests
                 AppConfig loaded = AppConfig.Load(root, root);
                 return !loaded.QuotaHudVisible
                     && loaded.QuotaHudX == 101 && loaded.QuotaHudY == 202
-                    && loaded.ConfigVersion == 9
+                    && loaded.ConfigVersion == 10
                     && (int)scale.GetValue(loaded, null) == 60
                     && Math.Abs((double)opacity.GetValue(loaded, null) - 0.50d) < 0.001d
                     && !(bool)topMost.GetValue(loaded, null);
@@ -410,53 +410,43 @@ namespace CodexToolsHost.Tests
             Size[] expectedClients = {
                 new Size(192, 83), new Size(240, 104), new Size(288, 124), new Size(320, 138) };
             bool allOk = true;
+            PropertyInfo nativeAlpha = form.GetType().GetProperty("EffectiveOpacityAlpha", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
             for (int i = 0; i < percents.Length; i++)
             {
-                Region previousRegion = form.Region;
                 config.QuotaHudScalePercent = percents[i];
                 config.QuotaHudOpacity = i == 0 ? 0.50d : 0.90d;
                 config.QuotaHudTopMost = i != 0;
                 applySettings.Invoke(form, null);
                 allOk = allOk && form.ClientSize == expectedClients[i]
                     && form.MinimumSize == form.Size && form.MaximumSize == form.Size
-                    && form.Region != null
-                    && IsRegionDisposed(previousRegion)
+                    && form.Region == null
+                    && nativeAlpha != null
+                    && (byte)nativeAlpha.GetValue(form, null) == (byte)(SystemInformation.HighContrast ? 255 : Math.Round(config.QuotaHudOpacity * 255))
                     && Math.Abs(form.ClientSize.Width / 320f - percents[i] / 100f) < 0.001f;
-                using (Graphics graphics = form.CreateGraphics())
-                {
-                    Rectangle bounds = Rectangle.Round(form.Region.GetBounds(graphics));
-                    allOk = allOk && bounds == new Rectangle(0, 0, form.Width, form.Height);
-                }
                 allOk = allOk && SaveAndCheckRender(form, tempRoot, percents[i]);
             }
-            return allOk && Math.Abs(form.Opacity - 0.90d) < 0.001d && form.TopMost;
+            // UpdateLayeredWindow applies global alpha itself; WinForms Opacity must
+            // remain 1, otherwise SetLayeredWindowAttributes blocks native uploads.
+            return allOk && Math.Abs(form.Opacity - 1d) < 0.001d && form.TopMost;
         }
 
         private static bool SaveAndCheckRender(Form form, string tempRoot, int percent)
         {
             string path = Path.Combine(tempRoot, "quota-hud-" + percent + ".png");
-            using (Bitmap bitmap = new Bitmap(form.Width, form.Height))
+            MethodInfo render = form.GetType().GetMethod("RenderFrame", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (render == null) return false;
+            using (Bitmap bitmap = (Bitmap)render.Invoke(form, null))
             {
-                form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
                 bitmap.Save(path);
-                Color background = Color.FromArgb(22, 27, 36);
-                Color panel = Color.FromArgb(18, 22, 30);
-                bool exactColors = PixelEquals(bitmap, ScalePoint(form, 70, 92), panel)
-                    && PixelEquals(bitmap, ScalePoint(form, 240, 92), panel)
-                    && PixelEquals(bitmap, ScalePoint(form, 160, 105), background)
-                    && PixelEquals(bitmap, ScalePoint(form, 2, 86), background);
-
-                int expectedRadius = Math.Max(1,
-                    (int)Math.Round(13f * Math.Min(
-                        form.ClientSize.Width / 320f, form.ClientSize.Height / 138f)));
-                int topInset = MeasureTopRegionInset(form.Region,
-                    Math.Min(1, Math.Max(0, form.Height - 1)), form.Width);
-                int expectedInset = ExpectedTopInset(expectedRadius, 1);
-                bool roundedRegion = form.Region != null
-                    && !form.Region.IsVisible(0, 0)
-                    && form.Region.IsVisible(expectedRadius, 1)
-                    && Math.Abs(topInset - expectedInset) <= 1;
-                return exactColors && roundedRegion;
+                int partial = 0;
+                for (int y = 0; y < Math.Min(20, bitmap.Height); y++)
+                    for (int x = 0; x < Math.Min(20, bitmap.Width); x++)
+                    {
+                        int alpha = bitmap.GetPixel(x, y).A;
+                        if (alpha > 0 && alpha < 255) partial++;
+                    }
+                return bitmap.Size == form.ClientSize && bitmap.GetPixel(0, 0).A == 0
+                    && partial > 0 && bitmap.GetPixel(bitmap.Width / 2, bitmap.Height / 4).A > 0;
             }
         }
 

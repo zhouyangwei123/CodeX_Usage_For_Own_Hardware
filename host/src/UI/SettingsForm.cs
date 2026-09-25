@@ -9,6 +9,8 @@ using CodexToolsHost.Model;
 using CodexToolsHost.Monitor;
 using CodexToolsHost.Protocol;
 using CodexToolsHost.Quota;
+using CodexToolsHost.Usage;
+using CodexToolsHost.Updates;
 
 namespace CodexToolsHost.UI
 {
@@ -84,6 +86,17 @@ namespace CodexToolsHost.UI
 
         private readonly AppConfig _config;
         private readonly BridgeService _bridge;
+        private readonly LocalUsageService _usage;
+        private readonly ReleaseUpdateService _updates;
+        public event Action HudDisplaySettingsChanged;
+        private ComboBox _hudStyle;
+        private ComboBox _hudScale;
+        private NumericUpDown _hudOpacity;
+        private CheckBox _hudVisible;
+        private CheckBox _hudTopMost;
+        private Label _hudSavedStatus;
+        private int _hudDirtyFields;
+        private bool _loadingHudSettings;
         private TabControl _tabs;
         private Button[] _navigationButtons;
         private TabControl _servicesSections;
@@ -142,9 +155,15 @@ namespace CodexToolsHost.UI
         private MijiaSettingsPanel _mijiaPanel;
 
         public SettingsForm(AppConfig config, BridgeService bridge)
+            : this(config, bridge, null, null) { }
+
+        public SettingsForm(AppConfig config, BridgeService bridge,
+            LocalUsageService usage, ReleaseUpdateService updates)
         {
             _config = config;
             _bridge = bridge;
+            _usage = usage;
+            _updates = updates;
             Text = "CodeX Tools 设置";
             Width = 1020;
             Height = 760;
@@ -190,6 +209,12 @@ namespace CodexToolsHost.UI
             _tabs.TabPages.Add(display);
             _tabs.TabPages.Add(BuildServicesTab());
             _tabs.TabPages.Add(BuildDiagnosticsTab());
+            if (_usage != null)
+            {
+                var usagePage = new TabPage("用量清单") { Padding = new Padding(0) };
+                usagePage.Controls.Add(new UsagePanel(_usage) { Dock = DockStyle.Fill });
+                _tabs.TabPages.Add(usagePage);
+            }
             foreach (TabPage page in _tabs.TabPages)
                 if (page.BackColor != Color.FromArgb(246, 248, 251))
                     page.BackColor = Color.FromArgb(246, 248, 251);
@@ -404,6 +429,20 @@ namespace CodexToolsHost.UI
             _diagnosticsSections = new TabControl { Dock = DockStyle.Fill };
             _diagnosticsSections.TabPages.Add(BuildMonitorTab());
             _diagnosticsSections.TabPages.Add(BuildAboutTab());
+            if (_updates != null)
+            {
+                var updatesPage = new TabPage("软件更新");
+                updatesPage.Controls.Add(new UpdateSettingsPanel(_updates, _config.UpdateChecksEnabled,
+                    delegate(bool enabled)
+                    {
+                        bool previous = _config.UpdateChecksEnabled;
+                        _config.UpdateChecksEnabled = enabled;
+                        try { _config.Save(); }
+                        catch { _config.UpdateChecksEnabled = previous; throw; }
+                    })
+                    { Dock = DockStyle.Fill });
+                _diagnosticsSections.TabPages.Add(updatesPage);
+            }
             _diagnosticsSections.SelectedIndexChanged += delegate
             {
                 if (_tabs.SelectedIndex == 4 && _diagnosticsSections.SelectedIndex == 0)
@@ -421,6 +460,12 @@ namespace CodexToolsHost.UI
             _mijiaPanel.Dock = DockStyle.Fill;
             page.Controls.Add(_mijiaPanel);
             return page;
+        }
+
+        public void ShowUpdates()
+        {
+            _tabs.SelectedIndex = 4;
+            if (_updates != null) _diagnosticsSections.SelectedIndex = _diagnosticsSections.TabPages.Count - 1;
         }
 
         private TabPage BuildButtonsTab()
@@ -845,8 +890,128 @@ namespace CodexToolsHost.UI
             }, 1, 12);
             layout.SetColumnSpan(layout.GetControlFromPosition(1, 12), 2);
             FillFormColumns(layout);
-            page.Controls.Add(layout);
+            var sections = new TabControl { Dock = DockStyle.Fill };
+            var hudPage = new TabPage("桌面额度浮窗") { Padding = new Padding(16) };
+            hudPage.Controls.Add(BuildHudSettings());
+            var hardwarePage = new TabPage("OLED 与灯效");
+            hardwarePage.Controls.Add(layout);
+            sections.TabPages.Add(hudPage);
+            sections.TabPages.Add(hardwarePage);
+            page.Controls.Add(sections);
             return page;
+        }
+
+        private Control BuildHudSettings()
+        {
+            var panel = new TableLayoutPanel { Dock = DockStyle.Fill, AutoScroll = true,
+                ColumnCount = 2, RowCount = 8, Padding = new Padding(12) };
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            for (int row = 0; row < 7; row++) panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
+            _hudStyle = new ComboBox { Name = "hudStyle", DropDownStyle = ComboBoxStyle.DropDownList, Width = 260 };
+            _hudStyle.Items.AddRange(new object[] { "柔光玻璃", "极简清晰", "经典双色" });
+            string style = AppConfig.NormalizeQuotaHudStyle(_config.QuotaHudStyle);
+            _hudStyle.SelectedIndex = style == "minimal" ? 1 : style == "classic" ? 2 : 0;
+            _hudScale = new ComboBox { Name = "hudScale", DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
+            _hudScale.Items.AddRange(new object[] { "60%", "75%", "90%", "100%" });
+            _hudScale.SelectedIndex = Array.IndexOf(new[] { 60, 75, 90, 100 }, _config.QuotaHudScalePercent);
+            _hudOpacity = new NumericUpDown { Minimum = 35, Maximum = 100, Width = 150,
+                Value = (decimal)Math.Max(35, Math.Min(100, Math.Round(_config.QuotaHudOpacity * 100))) };
+            _hudVisible = new CheckBox { Text = "显示额度浮窗", AutoSize = true, Checked = _config.QuotaHudVisible };
+            _hudTopMost = new CheckBox { Text = "始终置顶", AutoSize = true, Checked = _config.QuotaHudTopMost };
+            panel.Controls.Add(new Label { Text = "外观", AutoSize = true }, 0, 0); panel.Controls.Add(_hudStyle, 1, 0);
+            panel.Controls.Add(new Label { Text = "大小", AutoSize = true }, 0, 1); panel.Controls.Add(_hudScale, 1, 1);
+            panel.Controls.Add(new Label { Text = "不透明度 %", AutoSize = true }, 0, 2); panel.Controls.Add(_hudOpacity, 1, 2);
+            panel.Controls.Add(_hudVisible, 1, 3); panel.Controls.Add(_hudTopMost, 1, 4);
+            var apply = new Button { Text = "应用浮窗外观", Name = "applyHudAppearance", AutoSize = true, Padding = new Padding(12, 4, 12, 4) };
+            apply.Click += delegate
+            {
+                var previous = new HudPreferences(_config);
+                try
+                {
+                    StoreHudSettings(); _config.Save();
+                }
+                catch (Exception)
+                {
+                    previous.Restore(_config);
+                    _hudSavedStatus.ForeColor = Color.Firebrick; _hudSavedStatus.Text = "保存失败，当前外观保持原样；可检查目录权限后重试。";
+                    return;
+                }
+                SyncHudSettingsFromConfig(true);
+                _hudSavedStatus.ForeColor = Color.FromArgb(35, 105, 74); _hudSavedStatus.Text = "外观已应用。";
+                try { NotifyHudSettingsChanged(); }
+                catch (Exception) { _hudSavedStatus.ForeColor = Color.Firebrick; _hudSavedStatus.Text = "配置已保存；浮窗刷新未完成，可重新打开浮窗。"; }
+            };
+            panel.Controls.Add(apply, 1, 5);
+            _hudSavedStatus = new Label { AutoSize = true, Text = "柔光玻璃：通透底色与柔和高光；极简清晰：更高对比度。",
+                MaximumSize = new Size(520, 0), ForeColor = Color.FromArgb(75, 88, 106) };
+            panel.Controls.Add(_hudSavedStatus, 0, 6); panel.SetColumnSpan(_hudSavedStatus, 2);
+            var preview = new HudStylePreview { Dock = DockStyle.Fill, Style = style };
+            panel.Controls.Add(preview, 0, 7); panel.SetColumnSpan(preview, 2);
+            _hudStyle.SelectedIndexChanged += delegate
+            { preview.Style = _hudStyle.SelectedIndex == 1 ? "minimal" : _hudStyle.SelectedIndex == 2 ? "classic" : "glass"; };
+            _hudStyle.SelectedIndexChanged += delegate { MarkHudDirty(1); };
+            _hudScale.SelectedIndexChanged += delegate { MarkHudDirty(2); };
+            _hudOpacity.ValueChanged += delegate { MarkHudDirty(4); };
+            _hudVisible.CheckedChanged += delegate { MarkHudDirty(8); };
+            _hudTopMost.CheckedChanged += delegate { MarkHudDirty(16); };
+            return panel;
+        }
+
+        private void MarkHudDirty(int field)
+        {
+            if (_loadingHudSettings) return;
+            _hudDirtyFields |= field;
+            _hudSavedStatus.ForeColor = Color.FromArgb(75, 88, 106);
+            _hudSavedStatus.Text = "正在预览，点击应用后生效。";
+        }
+
+        public void SyncHudSettingsFromConfig()
+        { SyncHudSettingsFromConfig(false); }
+
+        private void SyncHudSettingsFromConfig(bool committed)
+        {
+            if (_hudStyle == null || IsDisposed) return;
+            _loadingHudSettings = true;
+            try
+            {
+                string style = AppConfig.NormalizeQuotaHudStyle(_config.QuotaHudStyle);
+                if (committed || (_hudDirtyFields & 1) == 0) _hudStyle.SelectedIndex = style == "minimal" ? 1 : style == "classic" ? 2 : 0;
+                if (committed || (_hudDirtyFields & 2) == 0) _hudScale.SelectedIndex = Array.IndexOf(new[] { 60, 75, 90, 100 }, _config.QuotaHudScalePercent);
+                if (committed || (_hudDirtyFields & 4) == 0) _hudOpacity.Value = (decimal)Math.Max(35, Math.Min(100, Math.Round(_config.QuotaHudOpacity * 100)));
+                if (committed || (_hudDirtyFields & 8) == 0) _hudVisible.Checked = _config.QuotaHudVisible;
+                if (committed || (_hudDirtyFields & 16) == 0) _hudTopMost.Checked = _config.QuotaHudTopMost;
+                if (committed) _hudDirtyFields = 0;
+            }
+            finally { _loadingHudSettings = false; }
+        }
+
+        private sealed class HudPreferences
+        {
+            private readonly string style; private readonly int scale; private readonly double opacity;
+            private readonly bool visible, topMost;
+            internal HudPreferences(AppConfig config)
+            { style = config.QuotaHudStyle; scale = config.QuotaHudScalePercent; opacity = config.QuotaHudOpacity; visible = config.QuotaHudVisible; topMost = config.QuotaHudTopMost; }
+            internal void Restore(AppConfig config)
+            { config.QuotaHudStyle = style; config.QuotaHudScalePercent = scale; config.QuotaHudOpacity = opacity; config.QuotaHudVisible = visible; config.QuotaHudTopMost = topMost; }
+        }
+
+        private void StoreHudSettings()
+        {
+            if ((_hudDirtyFields & 1) != 0)
+                _config.QuotaHudStyle = _hudStyle.SelectedIndex == 1 ? "minimal" : _hudStyle.SelectedIndex == 2 ? "classic" : "glass";
+            int index = Math.Max(0, Math.Min(3, _hudScale.SelectedIndex));
+            if ((_hudDirtyFields & 2) != 0) _config.QuotaHudScalePercent = new[] { 60, 75, 90, 100 }[index];
+            if ((_hudDirtyFields & 4) != 0) _config.QuotaHudOpacity = (double)_hudOpacity.Value / 100;
+            if ((_hudDirtyFields & 8) != 0) _config.QuotaHudVisible = _hudVisible.Checked;
+            if ((_hudDirtyFields & 16) != 0) _config.QuotaHudTopMost = _hudTopMost.Checked;
+        }
+
+        private void NotifyHudSettingsChanged()
+        {
+            Action changed = HudDisplaySettingsChanged;
+            if (changed != null) changed();
         }
 
         private TabPage BuildMonitorTab()
@@ -1367,6 +1532,8 @@ namespace CodexToolsHost.UI
 
         private void SaveAndApply()
         {
+            var previousHud = new HudPreferences(_config);
+            StoreHudSettings();
             if (_mijiaPanel != null) _mijiaPanel.ApplySettings();
             foreach (DataGridViewRow row in _grid.Rows)
             {
@@ -1406,10 +1573,17 @@ namespace CodexToolsHost.UI
             _config.Rgb.StatusComplete = _rgbStatusComplete.Text.Trim();
             _config.Rgb.StatusOffline = _rgbStatusOffline.Text.Trim();
 
-            _config.Save();
+            try { _config.Save(); }
+            catch (Exception)
+            {
+                previousHud.Restore(_config);
+                _portStatusLabel.Text = "保存失败，未下发设备配置；请检查配置目录权限后重试。";
+                return;
+            }
+            SyncHudSettingsFromConfig(true);
+            NotifyHudSettingsChanged();
             _bridge.ApplyDeviceConfig();
-            MessageBox.Show(this, "配置已保存并下发到设备。", "CodeX Tools",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _portStatusLabel.Text = "配置已保存；设备配置将在连接可用时下发。";
         }
 
         private void PickColor(TextBox target)

@@ -60,7 +60,7 @@ namespace CodexToolsHost.Model
         {
             ConfigPath = configPath;
             UsesFallbackPath = usesFallback;
-            ConfigVersion = 9;
+            ConfigVersion = 10;
             SerialPort = "COM7";
             CodexRefreshSeconds = 30;
             DeepSeekApiKey = "";
@@ -81,6 +81,8 @@ namespace CodexToolsHost.Model
             QuotaHudScalePercent = 75;
             QuotaHudOpacity = 0.90d;
             QuotaHudTopMost = true;
+            QuotaHudStyle = "glass";
+            UpdateChecksEnabled = true;
             QuotaHudX = null;
             QuotaHudY = null;
             Mijia = new MijiaSettings();
@@ -95,6 +97,13 @@ namespace CodexToolsHost.Model
         {
             return string.Equals(value, "opencodego", StringComparison.OrdinalIgnoreCase)
                 ? "opencodego" : "deepseek";
+        }
+
+        public static string NormalizeQuotaHudStyle(string value)
+        {
+            if (string.Equals(value, "minimal", StringComparison.OrdinalIgnoreCase)) return "minimal";
+            if (string.Equals(value, "classic", StringComparison.OrdinalIgnoreCase)) return "classic";
+            return "glass";
         }
 
         public string ConfigPath { get; private set; }
@@ -121,6 +130,8 @@ namespace CodexToolsHost.Model
         public int QuotaHudScalePercent { get; set; }
         public double QuotaHudOpacity { get; set; }
         public bool QuotaHudTopMost { get; set; }
+        public string QuotaHudStyle { get; set; }
+        public bool UpdateChecksEnabled { get; set; }
         public int? QuotaHudX { get; set; }
         public int? QuotaHudY { get; set; }
         public MijiaSettings Mijia { get; set; }
@@ -175,13 +186,14 @@ namespace CodexToolsHost.Model
 
         private void SaveCore()
         {
-            ConfigVersion = 9;
+            ConfigVersion = 10;
             SerialPort = SerialPortSelection.Normalize(SerialPort);
             if (CodexRefreshSeconds < 10) CodexRefreshSeconds = 30;
             if (DeepSeekRefreshSeconds < 30) DeepSeekRefreshSeconds = 300;
             if (OpenCodeGoRefreshSeconds < 30 || OpenCodeGoRefreshSeconds > 86400)
                 OpenCodeGoRefreshSeconds = 300;
             QuotaDisplaySource = NormalizeQuotaDisplaySource(QuotaDisplaySource);
+            QuotaHudStyle = NormalizeQuotaHudStyle(QuotaHudStyle);
             if (Array.IndexOf(AllowedQuotaHudScalePercents, QuotaHudScalePercent) < 0)
                 QuotaHudScalePercent = 75;
             if (double.IsNaN(QuotaHudOpacity) || double.IsInfinity(QuotaHudOpacity)
@@ -211,6 +223,8 @@ namespace CodexToolsHost.Model
             values["quotaHudScalePercent"] = QuotaHudScalePercent;
             values["quotaHudOpacity"] = QuotaHudOpacity;
             values["quotaHudTopMost"] = QuotaHudTopMost;
+            values["quotaHudStyle"] = QuotaHudStyle;
+            values["updateChecksEnabled"] = UpdateChecksEnabled;
             values["quotaHudX"] = QuotaHudX;
             values["quotaHudY"] = QuotaHudY;
 
@@ -331,8 +345,8 @@ namespace CodexToolsHost.Model
                 }
                 else DefaultOledPage = Math.Min(2, page.Value);
             }
-            NeedsSave = loadedVersion != 9;
-            ConfigVersion = 9;
+            NeedsSave = loadedVersion != 10;
+            ConfigVersion = 10;
             int? oa = ReadInt(values, "oledAddress");
             if (oa.HasValue && (oa.Value == 0 || oa.Value == 0x3C || oa.Value == 0x3D)) OledAddress = oa.Value;
             int? od = ReadInt(values, "oledDriver");
@@ -355,6 +369,8 @@ namespace CodexToolsHost.Model
             bool? hudTopMost = ReadBool(values, "quotaHudTopMost");
             if (!hudTopMost.HasValue) hudTopMost = ReadBool(values, "topMost");
             if (hudTopMost.HasValue) QuotaHudTopMost = hudTopMost.Value;
+            QuotaHudStyle = NormalizeQuotaHudStyle(ReadString(values, "quotaHudStyle"));
+            UpdateChecksEnabled = ReadBool(values, "updateChecksEnabled") ?? true;
             QuotaHudX = ReadInt(values, "quotaHudX");
             QuotaHudY = ReadInt(values, "quotaHudY");
             if (!QuotaHudX.HasValue || !QuotaHudY.HasValue)

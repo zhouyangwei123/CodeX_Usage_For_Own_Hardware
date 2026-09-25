@@ -1,9 +1,12 @@
 ﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
 using System.Windows.Forms;
 using CodexToolsHost.Core;
 using CodexToolsHost.Model;
+using CodexToolsHost.Usage;
+using CodexToolsHost.Updates;
 
 namespace CodexToolsHost.UI
 {
@@ -11,6 +14,8 @@ namespace CodexToolsHost.UI
     {
         private readonly AppConfig _config;
         private readonly BridgeService _bridge;
+        private readonly LocalUsageService _usage;
+        private readonly ReleaseUpdateService _updates;
         private readonly NotifyIcon _icon;
         private readonly ToolStripMenuItem _statusItem;
         private SettingsForm _settingsForm;
@@ -19,15 +24,24 @@ namespace CodexToolsHost.UI
         private ToolStripMenuItem _quotaHudSizeItem;
         private ToolStripMenuItem _quotaHudOpacityItem;
         private ToolStripMenuItem _quotaHudTopMostItem;
+        private ToolStripMenuItem _quotaHudStyleItem;
+        private ToolStripMenuItem _updateItem;
         private string _lastBalloonText;
         private DateTime _lastBalloonAt;
         private bool _exiting;
         private bool _bridgeDisposed;
+        private bool _servicesDisposed;
 
         public TrayApp(AppConfig config, BridgeService bridge)
         {
             _config = config;
             _bridge = bridge;
+            string codexHome = Environment.GetEnvironmentVariable("CODEX_HOME");
+            if (string.IsNullOrWhiteSpace(codexHome))
+                codexHome = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex");
+            _usage = new LocalUsageService(codexHome);
+            _updates = new ReleaseUpdateService(typeof(TrayApp).Assembly.GetName().Version,
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CodexToolsHost", "cache"));
             _icon = new NotifyIcon
             {
                 Icon = BuildCoffeeIcon(),
@@ -42,6 +56,7 @@ namespace CodexToolsHost.UI
                     { Enabled = false }
                 : null;
             var settingsItem = new ToolStripMenuItem("打开设置…");
+            _updateItem = new ToolStripMenuItem("软件更新…");
             var refreshItem = new ToolStripMenuItem("刷新额度");
             _quotaHudItem = new ToolStripMenuItem("显示额度与 API 余额");
             _quotaHudSizeItem = new ToolStripMenuItem("血条尺寸");
@@ -56,6 +71,10 @@ namespace CodexToolsHost.UI
             AddOpacityOption(_quotaHudOpacityItem, "90%", 0.90d);
             AddOpacityOption(_quotaHudOpacityItem, "100%", 1.0d);
             _quotaHudTopMostItem = new ToolStripMenuItem("始终置顶");
+            _quotaHudStyleItem = new ToolStripMenuItem("浮窗外观");
+            AddStyleOption(_quotaHudStyleItem, "柔光玻璃", "glass");
+            AddStyleOption(_quotaHudStyleItem, "极简清晰", "minimal");
+            AddStyleOption(_quotaHudStyleItem, "经典双色", "classic");
             var oledItem = new ToolStripMenuItem("循环 OLED 页面");
             var oledAutoItem = new ToolStripMenuItem("开启 OLED 自动轮播");
             var rgbItem = new ToolStripMenuItem("RGB 模式");
@@ -74,8 +93,10 @@ namespace CodexToolsHost.UI
                 _statusItem,
                 new ToolStripSeparator(),
                 settingsItem,
+                _updateItem,
                 refreshItem,
                 _quotaHudItem,
+                _quotaHudStyleItem,
                 _quotaHudSizeItem,
                 _quotaHudOpacityItem,
                 _quotaHudTopMostItem,
@@ -91,12 +112,14 @@ namespace CodexToolsHost.UI
             _icon.DoubleClick += delegate { SafeInvoke(OpenSettings); };
 
             settingsItem.Click += delegate { OpenSettings(); };
+            _updateItem.Click += delegate { OpenSettings(); _settingsForm.ShowUpdates(); };
             refreshItem.Click += delegate { _bridge.RefreshQuota(); };
             _quotaHudItem.Click += delegate { ToggleQuotaHud(); };
             _quotaHudTopMostItem.Click += delegate
             {
                 _config.QuotaHudTopMost = !_config.QuotaHudTopMost;
                 if (_quotaHud != null) _quotaHud.ApplyDisplaySettings();
+                SyncSettingsHud();
                 SaveConfigQuietly();
                 UpdateHudMenuChecks();
             };
@@ -119,6 +142,9 @@ namespace CodexToolsHost.UI
             _quotaHud = new QuotaHudForm(_config, _bridge.Codex, _bridge.DeepSeek,
                 delegate { _bridge.RefreshQuota(); }, _bridge);
             if (_config.QuotaHudVisible) _quotaHud.ShowFromTray();
+            _usage.Start();
+            _updates.Changed += OnUpdateChanged;
+            _updates.Start(_config.UpdateChecksEnabled);
             UpdateHudMenuChecks();
         }
 
@@ -172,7 +198,8 @@ namespace CodexToolsHost.UI
         {
             if (_settingsForm == null || _settingsForm.IsDisposed)
             {
-                _settingsForm = new SettingsForm(_config, _bridge);
+                _settingsForm = new SettingsForm(_config, _bridge, _usage, _updates);
+                _settingsForm.HudDisplaySettingsChanged += ApplyHudSettings;
                 _settingsForm.FormClosed += delegate { _settingsForm = null; };
             }
             _settingsForm.Show();
@@ -196,6 +223,7 @@ namespace CodexToolsHost.UI
             }
             UpdateHudMenuChecks();
             SaveConfigQuietly();
+            SyncSettingsHud();
         }
 
         private void UpdateHudMenuChecks()
@@ -206,6 +234,56 @@ namespace CodexToolsHost.UI
                 _quotaHudTopMostItem.Checked = _config.QuotaHudTopMost;
             UpdateScaleMenuChecks();
             UpdateOpacityMenuChecks();
+            if (_quotaHudStyleItem != null)
+                foreach (ToolStripMenuItem option in _quotaHudStyleItem.DropDownItems)
+                    option.Checked = (string)option.Tag == AppConfig.NormalizeQuotaHudStyle(_config.QuotaHudStyle);
+        }
+
+        private void AddStyleOption(ToolStripMenuItem parent, string label, string style)
+        {
+            var option = new ToolStripMenuItem(label) { Tag = style };
+            option.Click += delegate
+            {
+                _config.QuotaHudStyle = style;
+                if (_quotaHud != null) _quotaHud.ApplyDisplaySettings();
+                SyncSettingsHud();
+                SaveConfigQuietly(); UpdateHudMenuChecks();
+            };
+            parent.DropDownItems.Add(option);
+        }
+
+        private void ApplyHudSettings()
+        {
+            if (_quotaHud == null) return;
+            _quotaHud.ApplyDisplaySettings();
+            if (_config.QuotaHudVisible) _quotaHud.ShowFromTray(); else _quotaHud.HideFromTray();
+            UpdateHudMenuChecks();
+        }
+
+        private void SyncSettingsHud()
+        {
+            if (_settingsForm != null && !_settingsForm.IsDisposed) _settingsForm.SyncHudSettingsFromConfig();
+        }
+
+        private void DisposeServices()
+        {
+            if (_servicesDisposed) return;
+            _servicesDisposed = true;
+            if (_settingsForm != null) { _settingsForm.Dispose(); _settingsForm = null; }
+            _usage.Dispose();
+            _updates.Changed -= OnUpdateChanged;
+            _updates.Dispose();
+        }
+
+        private void OnUpdateChanged()
+        {
+            SafeInvoke(delegate
+            {
+                if (_exiting) return;
+                UpdateSnapshot snapshot = _updates.Snapshot;
+                _updateItem.Text = snapshot.State == UpdateCheckState.UpdateAvailable
+                    ? "发现新版本 " + snapshot.LatestTag + "…" : "软件更新…";
+            });
         }
 
         private void UpdateScaleMenuChecks()
@@ -239,6 +317,7 @@ namespace CodexToolsHost.UI
             {
                 _config.QuotaHudScalePercent = percent;
                 if (_quotaHud != null) _quotaHud.ApplyDisplaySettings();
+                SyncSettingsHud();
                 SaveConfigQuietly();
                 UpdateHudMenuChecks();
             };
@@ -253,6 +332,7 @@ namespace CodexToolsHost.UI
             {
                 _config.QuotaHudOpacity = opacity;
                 if (_quotaHud != null) _quotaHud.ApplyDisplaySettings();
+                SyncSettingsHud();
                 SaveConfigQuietly();
                 UpdateHudMenuChecks();
             };
@@ -282,6 +362,7 @@ namespace CodexToolsHost.UI
             _exiting = true;
             _config.QuotaHudVisible = _quotaHud != null && _quotaHud.Visible;
             DisposeHudWindows();
+            DisposeServices();
             SaveConfigQuietly();
             _icon.Visible = false;
             _icon.Dispose();
@@ -352,6 +433,7 @@ namespace CodexToolsHost.UI
                     SaveConfigQuietly();
                 }
                 try { _icon.Visible = false; _icon.Dispose(); } catch (Exception) { }
+                DisposeServices();
                 if (!_bridgeDisposed)
                 {
                     try { _bridge.Dispose(); } catch (Exception) { }

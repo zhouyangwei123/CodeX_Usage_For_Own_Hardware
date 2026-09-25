@@ -204,7 +204,7 @@ namespace CodexToolsHost.Tests
                 string path = Path.Combine(root, AppConfig.DefaultFileName);
                 File.WriteAllText(path, "{\"configVersion\":8,\"mijia\":{\"shortcuts\":[{\"name\":\"旧槽\",\"sceneId\":\"1\",\"sceneName\":\"旧场景\"}]}}");
                 AppConfig migrated = AppConfig.Load(root, root);
-                bool version = reloaded.ConfigVersion == 9;
+                bool version = reloaded.ConfigVersion == 10;
                 bool fields = reloaded.Mijia.ExecutablePath == "mijiaAPI.exe"
                     && reloaded.Mijia.AuthPath == "auth.json" && !reloaded.Mijia.AutoRefresh
                     && reloaded.Mijia.RefreshMinutes == 30;

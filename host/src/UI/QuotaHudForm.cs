@@ -1,6 +1,5 @@
 using System;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using CodexToolsHost.Core;
 using CodexToolsHost.Model;
@@ -51,6 +50,11 @@ namespace CodexToolsHost.UI
         private float _animationAngle;
         private bool _refreshing;
         private bool _initialized;
+        private Bitmap _frame;
+        private bool _frameDirty = true;
+        private bool _nativeFallback;
+        private bool _presenting;
+        private DateTimeOffset _refreshDeadline;
         private volatile bool _shutdown;
 
         public QuotaHudForm(AppConfig config, ICodexStatusSource source,
@@ -75,27 +79,32 @@ namespace CodexToolsHost.UI
             TopMost = _config.QuotaHudTopMost;
             StartPosition = FormStartPosition.Manual;
             BackColor = Color.FromArgb(22, 27, 36);
-            Opacity = QuotaHudPresentation.NormalizeOpacity(_config.QuotaHudOpacity);
             AutoScaleMode = AutoScaleMode.None;
             ApplyWindowSize(GetScaledWindowSize());
             MaximizeBox = false;
             MinimizeBox = false;
             DoubleBuffered = true;
             SetInitialLocation();
-            UpdateWindowRegion();
             UpdateApiSnapshot();
             RefreshNetworkFromBridgeOnUiThread();
 
             _animationTimer.Interval = 33;
             _animationTimer.Tick += delegate
             {
-                if (!_refreshing)
+                if (!_refreshing || !Visible || _shutdown)
                 {
                     _animationTimer.Stop();
                     return;
                 }
+                if (DateTimeOffset.UtcNow >= _refreshDeadline)
+                {
+                    _refreshing = false;
+                    _animationTimer.Stop();
+                    RequestRender();
+                    return;
+                }
                 _animationAngle = (_animationAngle + 15f) % 360f;
-                Invalidate();
+                RequestRender();
             };
             _positionTimer.Interval = 300;
             _positionTimer.Tick += delegate
@@ -106,11 +115,9 @@ namespace CodexToolsHost.UI
             _displayTimer.Interval = 1000;
             _displayTimer.Tick += delegate
             {
-                if (_shutdown || !_apiIsOpenCodeGo) return;
-                UpdateApiSnapshot();
-                Invalidate();
+                if (_shutdown || !Visible || !_apiIsOpenCodeGo) return;
+                if (UpdateApiSnapshot()) RequestRender();
             };
-            _displayTimer.Start();
 
             _source.Changed += OnSourceChanged;
             _source.StatusChanged += OnStatusChanged;
@@ -127,6 +134,7 @@ namespace CodexToolsHost.UI
             {
                 CreateParams parameters = base.CreateParams;
                 parameters.ExStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+                if (!UsesOpaqueFallback) parameters.ExStyle |= LayeredWindowSurface.ExtendedStyle;
                 return parameters;
             }
         }
@@ -135,6 +143,16 @@ namespace CodexToolsHost.UI
         {
             base.OnHandleCreated(e);
             RefreshNetworkFromBridgeOnUiThread();
+            RequestRender();
+        }
+
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            _animationTimer.Stop();
+            _displayTimer.Stop();
+            lock (_pcMetricsSync) _networkRefreshQueued = false;
+            _frameDirty = true;
+            base.OnHandleDestroyed(e);
         }
 
         public void ShowFromTray()
@@ -154,7 +172,7 @@ namespace CodexToolsHost.UI
             UpdateApiSnapshot();
             RefreshNetworkFromBridgeOnUiThread();
             if (!Visible) Show();
-            Invalidate();
+            RequestRender();
         }
 
         public void ApplyDisplaySettings()
@@ -164,14 +182,14 @@ namespace CodexToolsHost.UI
             Size target = GetScaledWindowSize();
             bool sizeChanged = ClientSize != target;
             ApplyWindowSize(target);
-            Opacity = QuotaHudPresentation.NormalizeOpacity(_config.QuotaHudOpacity);
             TopMost = _config.QuotaHudTopMost;
             if (sizeChanged)
                 Location = new Point(anchor.X - Width, anchor.Y - Height);
             Bounds = QuotaHudPresentation.EnsureVisible(Bounds, GetWorkingAreas());
-            UpdateWindowRegion();
+            UpdateStyles();
+            UpdateApiSnapshot();
             if (_initialized) SavePosition();
-            Invalidate();
+            RequestRender();
         }
 
         public void HideFromTray()
@@ -201,8 +219,9 @@ namespace CodexToolsHost.UI
             if (_shutdown) return;
             _refreshing = true;
             _animationAngle = 0f;
-            _animationTimer.Start();
-            Invalidate();
+            _refreshDeadline = DateTimeOffset.UtcNow.AddSeconds(30);
+            UpdateTimers();
+            RequestRender();
             try
             {
                 if (_refreshAction != null) _refreshAction();
@@ -211,7 +230,7 @@ namespace CodexToolsHost.UI
             {
                 _refreshing = false;
                 _animationTimer.Stop();
-                Invalidate();
+                RequestRender();
             }
         }
 
@@ -221,7 +240,21 @@ namespace CodexToolsHost.UI
             _initialized = true;
             _snapshot = _source.Quota ?? QuotaSnapshot.EmptyStale();
             UpdateApiSnapshot();
-            UpdateWindowRegion();
+            RequestRender();
+        }
+
+        protected override void OnVisibleChanged(EventArgs e)
+        {
+            base.OnVisibleChanged(e);
+            if (_config == null || _shutdown) return;
+            if (Visible)
+            {
+                _snapshot = _source.Quota ?? QuotaSnapshot.EmptyStale();
+                UpdateApiSnapshot();
+                RefreshNetworkFromBridgeOnUiThread();
+            }
+            UpdateTimers();
+            if (Visible) RequestRender();
         }
 
         protected override void OnMove(EventArgs e)
@@ -235,29 +268,20 @@ namespace CodexToolsHost.UI
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
-            UpdateWindowRegion();
+            RequestRender();
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            // The frame contains the background. A separate opaque clear would erase alpha.
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            float sx = ClientSize.Width / (float)CanonicalWindowSize().Width;
-            float sy = ClientSize.Height / (float)CanonicalWindowSize().Height;
-            GraphicsState state = e.Graphics.Save();
-            try
-            {
-                e.Graphics.ScaleTransform(sx, sy);
-                _renderer.Draw(e.Graphics,
-                    new Rectangle(Point.Empty, _renderer.PreferredSize), _snapshot,
-                    _animationAngle, _refreshing, _snapshot.IsStale);
-                DrawApiBalance(e.Graphics, new Rectangle(0,
-                    _renderer.PreferredSize.Height + ApiGap,
-                    CanonicalWindowSize().Width, ApiHeight));
-            }
-            finally
-            {
-                e.Graphics.Restore(state);
-            }
+            if (_shutdown || _config == null) return;
+            EnsureFrame();
+            if (_frame != null) e.Graphics.DrawImageUnscaled(_frame, Point.Empty);
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
@@ -310,6 +334,13 @@ namespace CodexToolsHost.UI
                 return;
             }
             base.WndProc(ref message);
+            // System high-contrast/theme changes arrive on the owning UI thread.
+            // Reconcile the HWND as well as the pixels, including while the HUD is hidden.
+            if ((message.Msg == 0x001A || message.Msg == 0x031A) && _config != null && !_shutdown)
+            {
+                UpdateStyles();
+                RequestRender();
+            }
         }
 
         protected override void Dispose(bool disposing)
@@ -323,6 +354,7 @@ namespace CodexToolsHost.UI
                 _apiFont.Dispose();
                 _apiGoFont.Dispose();
                 _renderer.Dispose();
+                if (_frame != null) { _frame.Dispose(); _frame = null; }
             }
             base.Dispose(disposing);
         }
@@ -341,8 +373,7 @@ namespace CodexToolsHost.UI
         {
             RunOnUiThread(delegate
             {
-                UpdateApiSnapshot();
-                Invalidate();
+                if (UpdateApiSnapshot()) RequestRender();
             });
         }
 
@@ -350,8 +381,7 @@ namespace CodexToolsHost.UI
         {
             RunOnUiThread(delegate
             {
-                UpdateApiSnapshot();
-                Invalidate();
+                if (UpdateApiSnapshot()) RequestRender();
             });
         }
 
@@ -367,15 +397,25 @@ namespace CodexToolsHost.UI
         private void UpdateSnapshot()
         {
             if (_shutdown || IsDisposed) return;
-            _snapshot = _source.Quota ?? QuotaSnapshot.EmptyStale();
+            QuotaSnapshot next = _source.Quota ?? QuotaSnapshot.EmptyStale();
+            bool changed = _refreshing || _snapshot == null
+                || _snapshot.PrimaryRemainingPercent != next.PrimaryRemainingPercent
+                || _snapshot.SecondaryRemainingPercent != next.SecondaryRemainingPercent
+                || _snapshot.PrimaryWindowMinutes != next.PrimaryWindowMinutes
+                || _snapshot.SecondaryWindowMinutes != next.SecondaryWindowMinutes
+                || _snapshot.IsStale != next.IsStale;
+            _snapshot = next;
             _refreshing = false;
             _animationTimer.Stop();
-            Invalidate();
+            if (changed) RequestRender();
         }
 
-        private void UpdateApiSnapshot()
+        private bool UpdateApiSnapshot()
         {
-            if (_shutdown || IsDisposed) return;
+            if (_shutdown || IsDisposed) return false;
+            string previous = _apiDisplayText;
+            bool stale = _apiStale, available = _apiAvailable, unlimited = _apiUnlimited;
+            bool isGo = _apiIsOpenCodeGo;
             _apiIsOpenCodeGo = string.Equals(
                 AppConfig.NormalizeQuotaDisplaySource(_config.QuotaDisplaySource),
                 "opencodego", StringComparison.OrdinalIgnoreCase);
@@ -397,6 +437,9 @@ namespace CodexToolsHost.UI
                 _apiAvailable = _apiSource.Available;
                 _apiUnlimited = _apiSource.Unlimited;
             }
+            UpdateTimers();
+            return previous != _apiDisplayText || stale != _apiStale
+                || available != _apiAvailable || unlimited != _apiUnlimited || isGo != _apiIsOpenCodeGo;
         }
 
         private void UpdateNetworkSnapshot(PcMetricsSnapshot snapshot)
@@ -445,8 +488,9 @@ namespace CodexToolsHost.UI
                 snapshot = _latestPcMetrics;
             }
             if (_shutdown || IsDisposed) return;
+            string previous = _networkDisplayText;
             UpdateNetworkSnapshot(snapshot);
-            Invalidate();
+            if (previous != _networkDisplayText) RequestRender();
         }
 
         private void RunOnUiThread(Action action)
@@ -537,89 +581,75 @@ namespace CodexToolsHost.UI
             catch (Exception) { }
         }
 
-        private void UpdateWindowRegion()
+        private bool UsesOpaqueFallback
         {
-            if (Width <= 0 || Height <= 0) return;
-            using (GraphicsPath path = new GraphicsPath())
-            {
-                Size standard = CanonicalWindowSize();
-                float sx = ClientSize.Width / (float)standard.Width;
-                float sy = ClientSize.Height / (float)standard.Height;
-                int radius = Math.Max(1, (int)Math.Round(13f * Math.Min(sx, sy)));
-                radius = Math.Min(radius, Math.Min(Width, Height) / 2);
-                int diameter = Math.Max(2, radius * 2);
-                path.AddArc(0, 0, diameter, diameter, 180, 90);
-                path.AddArc(Width - diameter, 0, diameter, diameter, 270, 90);
-                path.AddArc(Width - diameter, Height - diameter,
-                    diameter, diameter, 0, 90);
-                path.AddArc(0, Height - diameter, diameter, diameter, 90, 90);
-                path.CloseFigure();
-                Region previous = Region;
-                Region = new Region(path);
-                if (previous != null) previous.Dispose();
-            }
+            get { return _nativeFallback || SystemInformation.HighContrast; }
         }
 
-        private void DrawApiBalance(Graphics graphics, Rectangle bounds)
+        internal byte EffectiveOpacityAlpha
         {
-            graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using (Brush panel = new SolidBrush(Color.FromArgb(18, 22, 30)))
-            using (Brush text = new SolidBrush(Color.FromArgb(245, 247, 251)))
-            using (Brush dot = new SolidBrush(_apiStale
-                ? Color.FromArgb(145, 151, 164)
-                : _apiAvailable || _apiUnlimited
-                    ? Color.FromArgb(118, 255, 167)
-                    : Color.FromArgb(255, 135, 105)))
+            get { return UsesOpaqueFallback ? (byte)255 : (byte)Math.Round(
+                QuotaHudPresentation.NormalizeOpacity(_config.QuotaHudOpacity) * 255d); }
+        }
+
+        // Shared by native composition, ordinary fallback painting and offscreen verification.
+        // Caller owns the returned bitmap; rendering never creates a native window.
+        internal Bitmap RenderFrame()
+        {
+            return _renderer.RenderFrame(ClientSize, _snapshot, _config.QuotaHudStyle,
+                _animationAngle, _refreshing, _apiDisplayText, _networkDisplayText,
+                _apiStale, _apiAvailable || _apiUnlimited, _apiIsOpenCodeGo, UsesOpaqueFallback);
+        }
+
+        private void EnsureFrame()
+        {
+            if (!_frameDirty && _frame != null) return;
+            Bitmap next = RenderFrame();
+            Bitmap previous = _frame;
+            _frame = next;
+            _frameDirty = false;
+            if (previous != null) previous.Dispose();
+        }
+
+        private void RequestRender()
+        {
+            _frameDirty = true;
+            if (_config == null || _shutdown || IsDisposed || !Visible || !IsHandleCreated
+                || _presenting || ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
+            _presenting = true;
+            try
             {
-                int contentWidth = Math.Max(1, (bounds.Width - 8) / 2);
-                Rectangle apiBounds = new Rectangle(bounds.X, bounds.Y, contentWidth, bounds.Height);
-                Rectangle networkBounds = new Rectangle(apiBounds.Right + 8, bounds.Y,
-                    Math.Max(1, bounds.Right - apiBounds.Right - 8), bounds.Height);
-                FillRounded(graphics, panel,
-                    new Rectangle(apiBounds.X + 1, apiBounds.Y + 1,
-                        Math.Max(1, apiBounds.Width - 2), Math.Max(1, apiBounds.Height - 2)), 12);
-                FillRounded(graphics, panel,
-                    new Rectangle(networkBounds.X + 1, networkBounds.Y + 1,
-                        Math.Max(1, networkBounds.Width - 2), Math.Max(1, networkBounds.Height - 2)), 12);
-                graphics.FillEllipse(dot, apiBounds.Right - 16, apiBounds.Top + 17, 6, 6);
-                using (StringFormat format = new StringFormat())
+                EnsureFrame();
+                if (UsesOpaqueFallback)
                 {
-                    format.Alignment = StringAlignment.Near;
-                    format.LineAlignment = _apiIsOpenCodeGo
-                        ? StringAlignment.Near : StringAlignment.Center;
-                    Font apiFont = _apiIsOpenCodeGo ? _apiGoFont : _apiFont;
-                    graphics.DrawString(_apiDisplayText ?? "API · --", apiFont, text,
-                        new Rectangle(apiBounds.X + 10, apiBounds.Top + 4,
-                            apiBounds.Width - 30, _apiIsOpenCodeGo
-                                ? apiBounds.Height - 5 : apiBounds.Height - 8), format);
-                    format.Alignment = StringAlignment.Center;
-                    graphics.DrawString(_networkDisplayText ?? "↑-- ↓--", _apiFont, text,
-                        new Rectangle(networkBounds.X + 6, networkBounds.Top + 4,
-                            networkBounds.Width - 12, networkBounds.Height - 8), format);
+                    Invalidate();
+                }
+                else if (!LayeredWindowSurface.TryPresent(Handle, Location, _frame, EffectiveOpacityAlpha))
+                {
+                    ActivateOpaqueFallback();
                 }
             }
+            finally { _presenting = false; }
         }
 
-        private static void FillRounded(Graphics graphics, Brush brush,
-            Rectangle rectangle, int radius)
+        private void ActivateOpaqueFallback()
         {
-            if (rectangle.Width <= 0 || rectangle.Height <= 0) return;
-            int safeRadius = Math.Max(1,
-                Math.Min(radius, Math.Min(rectangle.Width, rectangle.Height) / 2));
-            using (GraphicsPath path = new GraphicsPath())
-            {
-                int diameter = safeRadius * 2;
-                path.AddArc(rectangle.Left, rectangle.Top,
-                    diameter, diameter, 180, 90);
-                path.AddArc(rectangle.Right - diameter, rectangle.Top,
-                    diameter, diameter, 270, 90);
-                path.AddArc(rectangle.Right - diameter, rectangle.Bottom - diameter,
-                    diameter, diameter, 0, 90);
-                path.AddArc(rectangle.Left, rectangle.Bottom - diameter,
-                    diameter, diameter, 90, 90);
-                path.CloseFigure();
-                graphics.FillPath(brush, path);
-            }
+            // Removing WS_EX_LAYERED restores ordinary WM_PAINT after a native failure.
+            // Do not call SetLayeredWindowAttributes or Form.Opacity on this window.
+            _nativeFallback = true;
+            _frameDirty = true;
+            UpdateStyles();
+            EnsureFrame();
+            Invalidate();
+        }
+
+        private void UpdateTimers()
+        {
+            if (_shutdown || IsDisposed) return;
+            _animationTimer.Enabled = Visible && _refreshing;
+            OpenCodeGoQuotaSnapshot go = _openCodeGoSource == null ? null : _openCodeGoSource.Quota;
+            _displayTimer.Enabled = Visible && _apiIsOpenCodeGo && go != null
+                && go.Rolling.ResetsAt.HasValue && go.Rolling.ResetsAt.Value > DateTimeOffset.UtcNow;
         }
     }
 }
