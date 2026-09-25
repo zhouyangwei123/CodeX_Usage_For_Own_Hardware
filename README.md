@@ -6,6 +6,8 @@ Windows 上位机与 STM32G474 桌面工具的联合仓库。上位机当前版�
 
 先阅读 [README_先看.md](README_先看.md)，开发接手阅读 [CODEX_接手说明.md](CODEX_接手说明.md)。
 
+Windows 安装包见 [0.2.0 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.2.0)。最新验证结果见 [验证记录](docs/VALIDATION.md)。
+
 - `host/`：WinForms 上位机，额度监控、电脑指标、按键/编码器配置与可选集成。
 - `firmware/STM32G474/`：CubeIDE 固件工程，2026-09-24 原样导入。
 - `docs/PROTOCOL.md`：当前串口协议。
