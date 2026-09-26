@@ -14,8 +14,8 @@ if($Baseline){
 }
 $src=Join-Path $repo 'host\src'
 if($Lifecycle){
-    $sources=@('Actions','Core','Model','Monitor','Mijia','Protocol','Quota') | ForEach-Object {Get-ChildItem -LiteralPath (Join-Path $src $_) -Filter '*.cs' -Recurse | ForEach-Object FullName}
-    $sources+=@('UI\QuotaHudForm.cs','UI\QuotaHudRenderer.cs','UI\QuotaHudPresentation.cs','Tests\FakeSources.cs') | ForEach-Object {Join-Path $src $_}
+    $sources=@('Actions','Core','Model','Monitor','Mijia','Protocol','Quota','Usage') | ForEach-Object {Get-ChildItem -LiteralPath (Join-Path $src $_) -Filter '*.cs' -Recurse | ForEach-Object FullName}
+    $sources+=@('UI\QuotaHudForm.cs','UI\QuotaHudActivity.cs','UI\QuotaHudRenderer.cs','UI\QuotaHudActivityRenderer.cs','UI\QuotaHudPresentation.cs','Tests\FakeSources.cs') | ForEach-Object {Join-Path $src $_}
     if(Test-Path -LiteralPath "$src\UI\LayeredWindowSurface.cs"){$sources+="$src\UI\LayeredWindowSurface.cs"}
     $sources+=Join-Path $PSScriptRoot 'Lifecycle.cs'
     $refs+='/r:System.Management.dll','/r:System.Web.Extensions.dll'

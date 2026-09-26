@@ -27,7 +27,7 @@ internal static class ConfigRunner
             Check((string)style.GetValue(AppConfig.Load(root, root), null) == "glass", "unknown style did not normalize");
             File.WriteAllText(config.ConfigPath, "{\"configVersion\":9,\"quotaHudScalePercent\":90,\"quotaHudOpacity\":0.7,\"deepSeekApiKey\":\"synthetic-old-key\"}");
             var old = AppConfig.Load(root, root);
-            Check(old.NeedsSave && old.ConfigVersion == 10, "old config did not request migration");
+            Check(old.NeedsSave && old.ConfigVersion == 11, "old config did not request migration");
             Check(old.QuotaHudScalePercent == 90 && Math.Abs(old.QuotaHudOpacity - 0.7) < 0.001 && old.DeepSeekApiKey == "synthetic-old-key", "migration changed existing preferences");
             Check((string)style.GetValue(old, null) == "glass" && (bool)updates.GetValue(old, null), "migration defaults invalid");
             Console.WriteLine("PASS preferences default, round trip, opt-out, fallback and migration preserve existing settings"); return 0;

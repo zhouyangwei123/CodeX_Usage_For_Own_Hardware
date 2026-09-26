@@ -25,6 +25,13 @@ namespace CodexToolsHost.Usage
         public string Source { get; internal set; }
         public DateTimeOffset UpdatedAt { get; internal set; }
         public ReadOnlyCollection<UsageRow> Rows { get; internal set; }
+        // Canonical numeric deltas only, before daily grouping. Never log bodies or session labels.
+        public ReadOnlyCollection<UsageActivityEvent> RecentActivity { get; internal set; }
+        public DateTimeOffset? LastObservedEventAt { get; internal set; }
+        // A readable empty source is available; incomplete/failed scans must not imply observed zero.
+        public bool ActivitySourceAvailable { get; internal set; }
+        public bool IsScanComplete { get; internal set; }
+        public bool ScanFailed { get; internal set; }
         public ReadOnlyCollection<string> Warnings { get; internal set; }
         public long BytesRead { get; internal set; }
         public int FilesDiscovered { get; internal set; }
@@ -37,6 +44,7 @@ namespace CodexToolsHost.Usage
             Source = "本机 Codex";
             PeriodKind = "daily";
             Rows = new List<UsageRow>().AsReadOnly();
+            RecentActivity = new List<UsageActivityEvent>().AsReadOnly();
             Warnings = new List<string>().AsReadOnly();
         }
         public UsageRow Totals { get { return Sum(Rows, "合计", "全部模型"); } }

@@ -63,6 +63,10 @@ namespace CodexToolsHost.Usage
                 {
                     if (disposed) return;
                     report = new UsageReport { Source = report.Source, Rows = report.Rows, UpdatedAt = report.UpdatedAt,
+                        RecentActivity = report.RecentActivity, LastObservedEventAt = report.LastObservedEventAt,
+                        ActivitySourceAvailable = report.ActivitySourceAvailable, IsScanComplete = false, ScanFailed = true,
+                        FilesDiscovered = report.FilesDiscovered, IsImported = report.IsImported, PeriodKind = report.PeriodKind,
+                        ImportedApiEstimateUsd = report.ImportedApiEstimateUsd,
                         Warnings = new System.Collections.Generic.List<string> { "本次用量读取未完成，保留上次结果；可稍后刷新。" }.AsReadOnly(), FilesPending = report.FilesPending };
                 }
                 Notify();

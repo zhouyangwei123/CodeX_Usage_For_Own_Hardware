@@ -25,6 +25,7 @@ namespace CodexToolsHost.UI
         private ToolStripMenuItem _quotaHudOpacityItem;
         private ToolStripMenuItem _quotaHudTopMostItem;
         private ToolStripMenuItem _quotaHudStyleItem;
+        private ToolStripMenuItem _quotaHudChartItem;
         private ToolStripMenuItem _updateItem;
         private string _lastBalloonText;
         private DateTime _lastBalloonAt;
@@ -72,6 +73,7 @@ namespace CodexToolsHost.UI
             AddOpacityOption(_quotaHudOpacityItem, "100%", 1.0d);
             _quotaHudTopMostItem = new ToolStripMenuItem("始终置顶");
             _quotaHudStyleItem = new ToolStripMenuItem("浮窗外观");
+            _quotaHudChartItem = new ToolStripMenuItem("显示 Token 曲线");
             AddStyleOption(_quotaHudStyleItem, "柔光玻璃", "glass");
             AddStyleOption(_quotaHudStyleItem, "极简清晰", "minimal");
             AddStyleOption(_quotaHudStyleItem, "经典双色", "classic");
@@ -97,6 +99,7 @@ namespace CodexToolsHost.UI
                 refreshItem,
                 _quotaHudItem,
                 _quotaHudStyleItem,
+                _quotaHudChartItem,
                 _quotaHudSizeItem,
                 _quotaHudOpacityItem,
                 _quotaHudTopMostItem,
@@ -115,6 +118,7 @@ namespace CodexToolsHost.UI
             _updateItem.Click += delegate { OpenSettings(); _settingsForm.ShowUpdates(); };
             refreshItem.Click += delegate { _bridge.RefreshQuota(); };
             _quotaHudItem.Click += delegate { ToggleQuotaHud(); };
+            _quotaHudChartItem.Click += delegate { if (_quotaHud != null) _quotaHud.ToggleChart(); };
             _quotaHudTopMostItem.Click += delegate
             {
                 _config.QuotaHudTopMost = !_config.QuotaHudTopMost;
@@ -140,7 +144,8 @@ namespace CodexToolsHost.UI
 
             _bridge.Start();
             _quotaHud = new QuotaHudForm(_config, _bridge.Codex, _bridge.DeepSeek,
-                delegate { _bridge.RefreshQuota(); }, _bridge);
+                delegate { _bridge.RefreshQuota(); }, _bridge, _usage);
+            _quotaHud.ChartExpansionChanged += delegate { UpdateHudMenuChecks(); SyncSettingsHud(); };
             if (_config.QuotaHudVisible) _quotaHud.ShowFromTray();
             _usage.Start();
             _updates.Changed += OnUpdateChanged;
@@ -232,6 +237,7 @@ namespace CodexToolsHost.UI
                 _quotaHudItem.Checked = _quotaHud != null && _quotaHud.Visible;
             if (_quotaHudTopMostItem != null)
                 _quotaHudTopMostItem.Checked = _config.QuotaHudTopMost;
+            if (_quotaHudChartItem != null) _quotaHudChartItem.Checked = _config.QuotaHudChartExpanded;
             UpdateScaleMenuChecks();
             UpdateOpacityMenuChecks();
             if (_quotaHudStyleItem != null)

@@ -92,7 +92,22 @@ namespace CodexToolsHost.UI
                 if (area.Contains(desired)) return desired;
             }
 
+            // Resizing the HUD preserves its bottom-right anchor. If the larger frame
+            // crosses a screen edge, keep that anchor's screen instead of teleporting
+            // to the primary monitor. Offscreen saved positions use the nearest area.
             Rectangle areaToUse = workAreas[0];
+            Point anchor = new Point(desired.Right - 1, desired.Bottom - 1);
+            double nearest = double.MaxValue;
+            foreach (Rectangle area in workAreas)
+            {
+                if (area.Contains(anchor)) { areaToUse = area; break; }
+                double dx = anchor.X < area.Left ? (double)area.Left - anchor.X
+                    : anchor.X >= area.Right ? (double)anchor.X - area.Right + 1 : 0;
+                double dy = anchor.Y < area.Top ? (double)area.Top - anchor.Y
+                    : anchor.Y >= area.Bottom ? (double)anchor.Y - area.Bottom + 1 : 0;
+                double distance = dx * dx + dy * dy;
+                if (distance < nearest) { nearest = distance; areaToUse = area; }
+            }
             int width = Math.Min(desired.Width, areaToUse.Width);
             int height = Math.Min(desired.Height, areaToUse.Height);
             int x = Math.Max(areaToUse.Left,

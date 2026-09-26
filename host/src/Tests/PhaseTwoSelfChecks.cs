@@ -106,7 +106,7 @@ namespace CodexToolsHost.Tests
                     // Closing a settings window must not dispose tray-owned services.
                     usage.RefreshAsync().GetAwaiter().GetResult();
                     checks["usageServiceSurvivesSettingsClose"] = usage.Report != null;
-                    checks["configRoundTripStillValid"] = AppConfig.Load(fixture, fixture).ConfigVersion == 10;
+                    checks["configRoundTripStillValid"] = AppConfig.Load(fixture, fixture).ConfigVersion == 11;
                 }
             }
             catch (Exception error) { checks["exception"] = error.GetType().Name + ": " + error.Message; }

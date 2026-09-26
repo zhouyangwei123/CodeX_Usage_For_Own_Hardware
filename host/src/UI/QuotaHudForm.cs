@@ -5,10 +5,11 @@ using CodexToolsHost.Core;
 using CodexToolsHost.Model;
 using CodexToolsHost.Monitor;
 using CodexToolsHost.Quota;
+using CodexToolsHost.Usage;
 
 namespace CodexToolsHost.UI
 {
-    public sealed class QuotaHudForm : Form
+    public sealed partial class QuotaHudForm : Form
     {
         private const int WM_NCHITTEST = 0x0084;
         private const int WM_MOUSEACTIVATE = 0x0021;
@@ -59,6 +60,10 @@ namespace CodexToolsHost.UI
 
         public QuotaHudForm(AppConfig config, ICodexStatusSource source,
             IDeepSeekSource apiSource, Action refreshAction, BridgeService bridge)
+            : this(config, source, apiSource, refreshAction, bridge, null) { }
+
+        public QuotaHudForm(AppConfig config, ICodexStatusSource source,
+            IDeepSeekSource apiSource, Action refreshAction, BridgeService bridge, LocalUsageService usage)
         {
             if (config == null) throw new ArgumentNullException("config");
             if (source == null) throw new ArgumentNullException("source");
@@ -70,6 +75,7 @@ namespace CodexToolsHost.UI
             _openCodeGoSource = bridge.OpenCodeGo;
             _refreshAction = refreshAction;
             _bridge = bridge;
+            _usage = usage;
             _uiThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
             _snapshot = source.Quota ?? QuotaSnapshot.EmptyStale();
 
@@ -124,6 +130,7 @@ namespace CodexToolsHost.UI
             _apiSource.Changed += OnApiSourceChanged;
             _openCodeGoSource.Changed += OnOpenCodeGoSourceChanged;
             _bridge.PcMetricsChanged += OnPcMetricsChanged;
+            InitializeActivity();
         }
 
         protected override bool ShowWithoutActivation { get { return true; } }
@@ -150,6 +157,7 @@ namespace CodexToolsHost.UI
         {
             _animationTimer.Stop();
             _displayTimer.Stop();
+            _activityTimer.Stop();
             lock (_pcMetricsSync) _networkRefreshQueued = false;
             _frameDirty = true;
             base.OnHandleDestroyed(e);
@@ -211,6 +219,8 @@ namespace CodexToolsHost.UI
             _apiSource.Changed -= OnApiSourceChanged;
             _openCodeGoSource.Changed -= OnOpenCodeGoSourceChanged;
             _bridge.PcMetricsChanged -= OnPcMetricsChanged;
+            _activityTimer.Stop();
+            if (_usage != null) _usage.Changed -= OnUsageChanged;
             SavePosition();
         }
 
@@ -252,6 +262,7 @@ namespace CodexToolsHost.UI
                 _snapshot = _source.Quota ?? QuotaSnapshot.EmptyStale();
                 UpdateApiSnapshot();
                 RefreshNetworkFromBridgeOnUiThread();
+                RefreshActivity(true);
             }
             UpdateTimers();
             if (Visible) RequestRender();
@@ -288,8 +299,9 @@ namespace CodexToolsHost.UI
         {
             base.OnMouseUp(e);
             if (e.Button != MouseButtons.Left || _shutdown) return;
-            Rectangle refresh = _renderer.RefreshHitBounds(
-                new Rectangle(Point.Empty, _renderer.PreferredSize));
+            if (_usage != null && ScaleToClient(QuotaHudRenderer.ActivityToggleBounds()).Contains(e.Location))
+            { ToggleChart(); return; }
+            Rectangle refresh = _renderer.RefreshHitBounds(QuotaBounds());
             refresh = ScaleToClient(refresh);
             if (refresh.Contains(e.Location)) BeginRefreshVisual();
         }
@@ -326,10 +338,11 @@ namespace CodexToolsHost.UI
                     unchecked((short)(packed & 0xffff)),
                     unchecked((short)((packed >> 16) & 0xffff)));
                 Point client = PointToClient(screen);
-                Rectangle refresh = _renderer.RefreshHitBounds(
-                    new Rectangle(Point.Empty, _renderer.PreferredSize));
+                Rectangle refresh = _renderer.RefreshHitBounds(QuotaBounds());
                 refresh = ScaleToClient(refresh);
-                message.Result = (IntPtr)(refresh.Contains(client)
+                bool activityHit = _usage != null && (ScaleToClient(QuotaHudRenderer.ActivityToggleBounds()).Contains(client)
+                    || ScaleToClient(QuotaHudRenderer.ActivityFooterBounds(_config.QuotaHudChartExpanded)).Contains(client));
+                message.Result = (IntPtr)(refresh.Contains(client) || activityHit
                     ? HTCLIENT : HTCAPTION);
                 return;
             }
@@ -351,6 +364,8 @@ namespace CodexToolsHost.UI
                 _animationTimer.Dispose();
                 _displayTimer.Dispose();
                 _positionTimer.Dispose();
+                _activityTimer.Dispose();
+                _activityTooltip.Dispose();
                 _apiFont.Dispose();
                 _apiGoFont.Dispose();
                 _renderer.Dispose();
@@ -543,6 +558,7 @@ namespace CodexToolsHost.UI
 
         private Size CanonicalWindowSize()
         {
+            if (_usage != null) return QuotaHudRenderer.ActivityWindowSize(_config.QuotaHudChartExpanded);
             return new Size(_renderer.PreferredSize.Width,
                 _renderer.PreferredSize.Height + ApiGap + ApiHeight);
         }
@@ -596,6 +612,10 @@ namespace CodexToolsHost.UI
         // Caller owns the returned bitmap; rendering never creates a native window.
         internal Bitmap RenderFrame()
         {
+            if (_usage != null) return _renderer.RenderActivityFrame(ClientSize, _snapshot, _config.QuotaHudStyle,
+                _animationAngle, _refreshing, _apiDisplayText, _networkDisplayText,
+                _apiStale, _apiAvailable || _apiUnlimited, _apiIsOpenCodeGo, UsesOpaqueFallback,
+                _activitySnapshot, _config.QuotaHudChartExpanded);
             return _renderer.RenderFrame(ClientSize, _snapshot, _config.QuotaHudStyle,
                 _animationAngle, _refreshing, _apiDisplayText, _networkDisplayText,
                 _apiStale, _apiAvailable || _apiUnlimited, _apiIsOpenCodeGo, UsesOpaqueFallback);
@@ -647,6 +667,7 @@ namespace CodexToolsHost.UI
         {
             if (_shutdown || IsDisposed) return;
             _animationTimer.Enabled = Visible && _refreshing;
+            _activityTimer.Enabled = Visible && _usage != null;
             OpenCodeGoQuotaSnapshot go = _openCodeGoSource == null ? null : _openCodeGoSource.Quota;
             _displayTimer.Enabled = Visible && _apiIsOpenCodeGo && go != null
                 && go.Rolling.ResetsAt.HasValue && go.Rolling.ResetsAt.Value > DateTimeOffset.UtcNow;

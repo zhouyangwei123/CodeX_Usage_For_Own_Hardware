@@ -18,7 +18,7 @@ namespace CodexToolsHost.UI
         public string SecondaryText { get; set; }
     }
 
-    internal sealed class QuotaHudRenderer : IDisposable
+    internal sealed partial class QuotaHudRenderer : IDisposable
     {
         private readonly Font _labelFont = new Font("Segoe UI", 9f, FontStyle.Bold, GraphicsUnit.Pixel);
         private readonly Font _percentFont = new Font("Segoe UI", 13f, FontStyle.Bold, GraphicsUnit.Pixel);

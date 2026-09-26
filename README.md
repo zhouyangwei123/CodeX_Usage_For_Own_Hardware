@@ -1,12 +1,12 @@
 # CodeX Usage
 
-Windows 上位机与 STM32G474 桌面工具的联合仓库。上位机当前版本：0.3.0。
+Windows 上位机与 STM32G474 桌面工具的联合仓库。上位机当前版本：0.4.0。
 
 远端：https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware
 
 先阅读 [README_先看.md](README_先看.md)，开发接手阅读 [CODEX_接手说明.md](CODEX_接手说明.md)。
 
-Windows 便携发布包见 [0.3.0 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.3.0)。最新验证结果见 [0.3.0 验证记录](docs/VALIDATION-0.3.0.md)。
+Windows 便携发布包见 [0.4.0 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.4.0)。最新验证结果见 [0.4.0 验证记录](docs/VALIDATION-0.4.0.md)。
 
 - `host/`：WinForms 上位机，额度监控、电脑指标、按键/编码器配置与可选集成。
 - `firmware/STM32G474/`：CubeIDE 固件工程，2026-09-24 原样导入。
@@ -26,6 +26,15 @@ Windows 便携发布包见 [0.3.0 Release](https://github.com/zhouyangwei123/Cod
 当前不修改或烧录固件；设备不在手边时仅验证上位机与模拟通讯。
 
 本地 `baseline` 分支保存导入时的工程，后续更改在功能分支进行。导入提交由 Codex 工具署名，不修改用户全局 Git 身份。
+
+## 0.4.0 的主要变化
+
+- 玻璃浮窗新增最近一小时 Token 曲线，10 秒一个点，统计各时刻最近 60 秒用量。
+- 小箭头一键折叠曲线并记住状态；底部 API、Token 输入/输出、网络上下行三列始终可见。
+- 区分扫描中、部分记录、读取失败与正常空闲；首次历史加载不会产生实时虚假峰值。
+- 修复边缘展开或缩放时跨屏跳回主屏的问题；固件保持原样。
+
+使用与统计口径见 [Token 活动说明](docs/TOKEN_ACTIVITY.md)。
 
 ## 0.3.0 的主要变化
 

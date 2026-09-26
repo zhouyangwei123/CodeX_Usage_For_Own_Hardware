@@ -60,7 +60,7 @@ namespace CodexToolsHost.Model
         {
             ConfigPath = configPath;
             UsesFallbackPath = usesFallback;
-            ConfigVersion = 10;
+            ConfigVersion = 11;
             SerialPort = "COM7";
             CodexRefreshSeconds = 30;
             DeepSeekApiKey = "";
@@ -82,6 +82,7 @@ namespace CodexToolsHost.Model
             QuotaHudOpacity = 0.90d;
             QuotaHudTopMost = true;
             QuotaHudStyle = "glass";
+            QuotaHudChartExpanded = true;
             UpdateChecksEnabled = true;
             QuotaHudX = null;
             QuotaHudY = null;
@@ -131,6 +132,7 @@ namespace CodexToolsHost.Model
         public double QuotaHudOpacity { get; set; }
         public bool QuotaHudTopMost { get; set; }
         public string QuotaHudStyle { get; set; }
+        public bool QuotaHudChartExpanded { get; set; }
         public bool UpdateChecksEnabled { get; set; }
         public int? QuotaHudX { get; set; }
         public int? QuotaHudY { get; set; }
@@ -186,7 +188,7 @@ namespace CodexToolsHost.Model
 
         private void SaveCore()
         {
-            ConfigVersion = 10;
+            ConfigVersion = 11;
             SerialPort = SerialPortSelection.Normalize(SerialPort);
             if (CodexRefreshSeconds < 10) CodexRefreshSeconds = 30;
             if (DeepSeekRefreshSeconds < 30) DeepSeekRefreshSeconds = 300;
@@ -224,6 +226,7 @@ namespace CodexToolsHost.Model
             values["quotaHudOpacity"] = QuotaHudOpacity;
             values["quotaHudTopMost"] = QuotaHudTopMost;
             values["quotaHudStyle"] = QuotaHudStyle;
+            values["quotaHudChartExpanded"] = QuotaHudChartExpanded;
             values["updateChecksEnabled"] = UpdateChecksEnabled;
             values["quotaHudX"] = QuotaHudX;
             values["quotaHudY"] = QuotaHudY;
@@ -345,8 +348,8 @@ namespace CodexToolsHost.Model
                 }
                 else DefaultOledPage = Math.Min(2, page.Value);
             }
-            NeedsSave = loadedVersion != 10;
-            ConfigVersion = 10;
+            NeedsSave = loadedVersion != 11;
+            ConfigVersion = 11;
             int? oa = ReadInt(values, "oledAddress");
             if (oa.HasValue && (oa.Value == 0 || oa.Value == 0x3C || oa.Value == 0x3D)) OledAddress = oa.Value;
             int? od = ReadInt(values, "oledDriver");
@@ -370,6 +373,7 @@ namespace CodexToolsHost.Model
             if (!hudTopMost.HasValue) hudTopMost = ReadBool(values, "topMost");
             if (hudTopMost.HasValue) QuotaHudTopMost = hudTopMost.Value;
             QuotaHudStyle = NormalizeQuotaHudStyle(ReadString(values, "quotaHudStyle"));
+            QuotaHudChartExpanded = ReadBool(values, "quotaHudChartExpanded") ?? true;
             UpdateChecksEnabled = ReadBool(values, "updateChecksEnabled") ?? true;
             QuotaHudX = ReadInt(values, "quotaHudX");
             QuotaHudY = ReadInt(values, "quotaHudY");

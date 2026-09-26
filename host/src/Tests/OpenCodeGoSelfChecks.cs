@@ -91,7 +91,7 @@ namespace CodexToolsHost.Tests
             try
             {
                 AppConfig config = AppConfig.Load(root, root);
-                bool defaultsOk = config.ConfigVersion == 10
+                bool defaultsOk = config.ConfigVersion == 11
                     && config.OpenCodeGoApiKey == ""
                     && config.OpenCodeGoRefreshSeconds == 300
                     && config.QuotaDisplaySource == "deepseek";
@@ -101,7 +101,7 @@ namespace CodexToolsHost.Tests
                 config.Save();
                 AppConfig loaded = AppConfig.Load(root, root);
                 configRoundtripOk = defaultsOk
-                    && loaded.ConfigVersion == 10
+                    && loaded.ConfigVersion == 11
                     && loaded.OpenCodeGoApiKey == "go-test-key"
                     && loaded.OpenCodeGoRefreshSeconds == 120
                     && loaded.QuotaDisplaySource == "opencodego";
@@ -115,7 +115,7 @@ namespace CodexToolsHost.Tests
                 File.WriteAllText(path, new JavaScriptSerializer().Serialize(legacy),
                     new UTF8Encoding(false));
                 AppConfig migrated = AppConfig.Load(root, root);
-                legacyMigrationOk = migrated.ConfigVersion == 10
+                legacyMigrationOk = migrated.ConfigVersion == 11
                     && migrated.DeepSeekApiKey == "deepseek-test-key"
                     && migrated.OpenCodeGoApiKey == ""
                     && migrated.QuotaDisplaySource == "deepseek"

@@ -141,11 +141,11 @@ namespace CodexToolsHost
                 result["configRoundtripOk"] = reloaded.SerialPort == "auto"
                     && reloaded.DeepSeekApiKey == "sk-test"
                     && reloaded.ApiBalanceProvider == "openrouter"
-                    && reloaded.ConfigVersion == 10
+                    && reloaded.ConfigVersion == 11
                     && reloaded.DefaultOledPage == 2;
                 if (reloaded.SerialPort != "auto" || reloaded.DeepSeekApiKey != "sk-test"
                     || reloaded.ApiBalanceProvider != "openrouter"
-                    || reloaded.ConfigVersion != 10 || reloaded.DefaultOledPage != 2) exitCode = 4;
+                    || reloaded.ConfigVersion != 11 || reloaded.DefaultOledPage != 2) exitCode = 4;
 
                 /* clean release 只含 EXE 时，用户配置应落在 LocalAppData。 */
                 bool releaseUsesLocalConfig = CheckCleanReleaseConfigPath();
@@ -197,8 +197,8 @@ namespace CodexToolsHost
                 AppConfig migratedPc = AppConfig.Load(migrationDir, migrationDir);
                 File.WriteAllText(migrationPath, "{\"configVersion\":3,\"defaultOledPage\":3}", new UTF8Encoding(false));
                 AppConfig migratedAuto = AppConfig.Load(migrationDir, migrationDir);
-                bool pageMigrationOk = migratedPc.ConfigVersion == 10 && migratedPc.DefaultOledPage == 1
-                    && migratedAuto.ConfigVersion == 10 && migratedAuto.DefaultOledPage == 2;
+                bool pageMigrationOk = migratedPc.ConfigVersion == 11 && migratedPc.DefaultOledPage == 1
+                    && migratedAuto.ConfigVersion == 11 && migratedAuto.DefaultOledPage == 2;
                 result["pageMigrationOk"] = pageMigrationOk;
                 if (!pageMigrationOk) exitCode = 4;
 

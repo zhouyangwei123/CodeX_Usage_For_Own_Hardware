@@ -290,7 +290,7 @@ namespace CodexToolsHost.Tests
                 AppConfig loaded = AppConfig.Load(root, root);
                 return !loaded.QuotaHudVisible
                     && loaded.QuotaHudX == 101 && loaded.QuotaHudY == 202
-                    && loaded.ConfigVersion == 10
+                    && loaded.ConfigVersion == 11
                     && (int)scale.GetValue(loaded, null) == 60
                     && Math.Abs((double)opacity.GetValue(loaded, null) - 0.50d) < 0.001d
                     && !(bool)topMost.GetValue(loaded, null);

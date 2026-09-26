@@ -14,11 +14,15 @@ namespace CodexToolsHost.Usage
         // A refresh is bounded; subsequent refreshes continue the unfinished scan.
         internal const long RefreshByteBudget = 32L * 1024 * 1024;
         private const int MaxLineBytes = 2 * 1024 * 1024;
+        private const string MissingModelWarning = "部分用量缺少模型标记，保留为未知模型。";
         private readonly string home;
         private readonly Dictionary<string, FileState> files = new Dictionary<string, FileState>(StringComparer.OrdinalIgnoreCase);
         private List<string> knownPaths;
         private DateTime nextDiscovery;
         private UsageReport lastReport;
+        private HashSet<string> discoveryWarnings = new HashSet<string>();
+        private HashSet<string> dataWarnings = new HashSet<string>();
+        private DateTimeOffset? nextFutureEvent, activityOmittedThrough;
         private readonly JavaScriptSerializer json = new JavaScriptSerializer { MaxJsonLength = MaxLineBytes, RecursionLimit = 48 };
         private sealed class Counts
         {
@@ -48,16 +52,22 @@ namespace CodexToolsHost.Usage
         public UsageReport Scan(CancellationToken cancellation)
         {
             cancellation.ThrowIfCancellationRequested();
+            DateTimeOffset scanTime = DateTimeOffset.Now;
             HashSet<string> warnings = new HashSet<string>();
-            bool changed = lastReport == null;
+            bool sourceAvailable = Directory.Exists(Path.Combine(home, "sessions")) || Directory.Exists(Path.Combine(home, "archived_sessions"));
+            bool changed = lastReport == null || (nextFutureEvent.HasValue && nextFutureEvent.Value <= scanTime);
             if (knownPaths == null || DateTime.UtcNow >= nextDiscovery)
             {
                 List<string> discovered = new List<string>();
                 foreach (string folder in new[] { "sessions", "archived_sessions" })
                     Discover(Path.Combine(home, folder), discovered, warnings, cancellation);
+                discoveryWarnings = new HashSet<string>(warnings);
+                // A failed enumeration cannot prove that previously discovered files disappeared.
+                if (warnings.Count > 0 && knownPaths != null) discovered = discovered.Union(knownPaths, StringComparer.OrdinalIgnoreCase).ToList();
                 changed = changed || knownPaths == null || !new HashSet<string>(knownPaths, StringComparer.OrdinalIgnoreCase).SetEquals(discovered);
                 knownPaths = discovered; nextDiscovery = DateTime.UtcNow.AddSeconds(60);
             }
+            warnings.UnionWith(discoveryWarnings);
             List<string> paths = knownPaths;
             HashSet<string> present = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
             foreach (string old in files.Keys.Where(x => !present.Contains(x)).ToArray()) { files.Remove(old); changed = true; }
@@ -68,7 +78,7 @@ namespace CodexToolsHost.Usage
                 try
                 {
                     FileInfo info = new FileInfo(path);
-                    if (!info.Exists) continue; // Keep the prior snapshot until the next discovery resolves an archive move.
+                    if (!info.Exists) { warnings.Add("部分已发现日志暂不可用，保留上次记录并等待重新发现。"); continue; }
                     FileState state;
                     bool exists = files.TryGetValue(path, out state);
                     bool modified = !exists || info.LastWriteTimeUtc != state.Modified || info.Length != state.Length;
@@ -89,11 +99,23 @@ namespace CodexToolsHost.Usage
             }
             cancellation.ThrowIfCancellationRequested();
             int pending = files.Values.Count(x => x.Offset < x.Length && !x.Partial);
-            if (!changed && lastReport != null && warnings.Count == 0)
-                return new UsageReport { Rows = lastReport.Rows, Warnings = lastReport.Warnings, UpdatedAt = DateTimeOffset.Now,
-                    FilesDiscovered = paths.Count, FilesPending = pending, BytesRead = read };
             if (pending > 0) warnings.Add("首次读取进行中；当前为已扫描部分，将自动继续。");
-            if (files.Count == 0) warnings.Add("未找到本机 sessions / archived_sessions 日志。");
+            if (!sourceAvailable) warnings.Add("未找到可用的本机 sessions / archived_sessions 日志目录。");
+            if (!changed && lastReport != null)
+            {
+                warnings.UnionWith(dataWarnings);
+                if (activityOmittedThrough >= scanTime.AddSeconds(-UsageActivity.RetentionSeconds)) warnings.Add("近期数值事件超过保留上限，活动曲线覆盖不完整。");
+                bool complete = sourceAvailable && !HasCoverageWarnings(warnings);
+                AddBoundaryWarning(warnings);
+                lastReport = new UsageReport { Rows = lastReport.Rows,
+                    RecentActivity = lastReport.RecentActivity.Where(x => x.Time >= scanTime.AddSeconds(-UsageActivity.RetentionSeconds)).ToList().AsReadOnly(),
+                    LastObservedEventAt = lastReport.LastObservedEventAt, ActivitySourceAvailable = sourceAvailable, IsScanComplete = complete,
+                    Warnings = warnings.OrderBy(x => x).ToList().AsReadOnly(), UpdatedAt = scanTime,
+                    FilesDiscovered = paths.Count, FilesPending = pending, BytesRead = read };
+                return lastReport;
+            }
+            HashSet<string> scanWarnings = warnings;
+            warnings = new HashSet<string>();
             List<FileState> canonical = files.Values.Where(x => x.Id != null)
                 .GroupBy(x => x.Id, StringComparer.Ordinal).Select(x => SelectCopy(x, warnings)).ToList();
             Dictionary<string, FileState> sessions = canonical.ToDictionary(x => x.Id, StringComparer.Ordinal);
@@ -164,11 +186,37 @@ namespace CodexToolsHost.Usage
             }
             List<UsageRow> grouped = rows.GroupBy(x => new { x.Day, x.SessionId, x.Model }).Select(x => UsageReport.Sum(x, x.Key.SessionId, x.Key.Model))
                 .OrderByDescending(x => x.LastActivity).ToList();
-            // Always label the data boundary: this is observable local history, not account-wide usage.
-            warnings.Add("仅覆盖本机可读 Token 日志；删除、旧版无计数及其他设备的历史不在内。费用未知，未计入订阅额度。");
-            lastReport = new UsageReport { Rows = grouped.AsReadOnly(), Warnings = warnings.OrderBy(x => x).ToList().AsReadOnly(), UpdatedAt = DateTimeOffset.Now,
+            List<UsageActivityEvent> recent = rows.Where(x => x.LastActivity >= scanTime.AddSeconds(-UsageActivity.RetentionSeconds) && x.LastActivity <= scanTime)
+                .OrderBy(x => x.LastActivity).Select(x => new UsageActivityEvent { Time = x.LastActivity, InputTokens = x.InputTokens, OutputTokens = x.OutputTokens }).ToList();
+            DateTimeOffset? lastEvent = rows.Where(x => x.LastActivity <= scanTime).Select(x => (DateTimeOffset?)x.LastActivity).Max();
+            nextFutureEvent = rows.Where(x => x.LastActivity > scanTime).Select(x => (DateTimeOffset?)x.LastActivity).Min();
+            activityOmittedThrough = null;
+            if (recent.Count > UsageActivity.MaximumEvents)
+            {
+                int omitted = recent.Count - UsageActivity.MaximumEvents;
+                activityOmittedThrough = recent[omitted - 1].Time;
+                recent.RemoveRange(0, omitted);
+            }
+            dataWarnings = new HashSet<string>(warnings);
+            warnings.UnionWith(scanWarnings);
+            if (activityOmittedThrough.HasValue) warnings.Add("近期数值事件超过保留上限，活动曲线覆盖不完整。");
+            bool scanComplete = sourceAvailable && !HasCoverageWarnings(warnings);
+            AddBoundaryWarning(warnings);
+            lastReport = new UsageReport { Rows = grouped.AsReadOnly(), RecentActivity = recent.AsReadOnly(), LastObservedEventAt = lastEvent,
+                ActivitySourceAvailable = sourceAvailable, IsScanComplete = scanComplete,
+                Warnings = warnings.OrderBy(x => x).ToList().AsReadOnly(), UpdatedAt = scanTime,
                 BytesRead = read, FilesDiscovered = paths.Count, FilesPending = pending };
             return lastReport;
+        }
+        private static void AddBoundaryWarning(HashSet<string> warnings)
+        {
+            // This informational scope statement does not make an otherwise healthy scan partial.
+            warnings.Add("仅覆盖本机可读 Token 日志；删除、旧版无计数及其他设备的历史不在内。费用未知，未计入订阅额度。");
+        }
+        private static bool HasCoverageWarnings(IEnumerable<string> warnings)
+        {
+            // Missing model labels affect grouping, but not the completeness of numeric activity.
+            return warnings.Any(x => x != MissingModelWarning);
         }
         private static FileState SelectCopy(IEnumerable<FileState> copies, HashSet<string> warnings)
         {
@@ -303,7 +351,7 @@ namespace CodexToolsHost.Usage
                     DateTimeOffset time;
                     if (!DateTimeOffset.TryParse(Text(value, "timestamp"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out time)) throw new FormatException();
                     state.Events.Add(new TokenEvent { Time = time, Total = total, Last = last, Model = state.Model, InheritedContext = state.InheritedContext });
-                    if (state.Model == "未知模型") state.Warnings.Add("部分用量缺少模型标记，保留为未知模型。");
+                    if (state.Model == "未知模型") state.Warnings.Add(MissingModelWarning);
                 }
             }
             catch (ArgumentException) { state.Warnings.Add("存在无法解析的统计事件，已跳过。"); }

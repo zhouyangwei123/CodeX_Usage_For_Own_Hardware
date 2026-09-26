@@ -94,6 +94,7 @@ namespace CodexToolsHost.UI
         private NumericUpDown _hudOpacity;
         private CheckBox _hudVisible;
         private CheckBox _hudTopMost;
+        private HudStylePreview _hudPreview;
         private Label _hudSavedStatus;
         private int _hudDirtyFields;
         private bool _loadingHudSettings;
@@ -908,7 +909,7 @@ namespace CodexToolsHost.UI
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
             panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             for (int row = 0; row < 7; row++) panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 180));
+            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 270));
             _hudStyle = new ComboBox { Name = "hudStyle", DropDownStyle = ComboBoxStyle.DropDownList, Width = 260 };
             _hudStyle.Items.AddRange(new object[] { "柔光玻璃", "极简清晰", "经典双色" });
             string style = AppConfig.NormalizeQuotaHudStyle(_config.QuotaHudStyle);
@@ -947,7 +948,8 @@ namespace CodexToolsHost.UI
             _hudSavedStatus = new Label { AutoSize = true, Text = "柔光玻璃：通透底色与柔和高光；极简清晰：更高对比度。",
                 MaximumSize = new Size(520, 0), ForeColor = Color.FromArgb(75, 88, 106) };
             panel.Controls.Add(_hudSavedStatus, 0, 6); panel.SetColumnSpan(_hudSavedStatus, 2);
-            var preview = new HudStylePreview { Dock = DockStyle.Fill, Style = style };
+            var preview = new HudStylePreview { Dock = DockStyle.Fill, Style = style, ChartExpanded = _config.QuotaHudChartExpanded };
+            _hudPreview = preview;
             panel.Controls.Add(preview, 0, 7); panel.SetColumnSpan(preview, 2);
             _hudStyle.SelectedIndexChanged += delegate
             { preview.Style = _hudStyle.SelectedIndex == 1 ? "minimal" : _hudStyle.SelectedIndex == 2 ? "classic" : "glass"; };
@@ -982,6 +984,7 @@ namespace CodexToolsHost.UI
                 if (committed || (_hudDirtyFields & 4) == 0) _hudOpacity.Value = (decimal)Math.Max(35, Math.Min(100, Math.Round(_config.QuotaHudOpacity * 100)));
                 if (committed || (_hudDirtyFields & 8) == 0) _hudVisible.Checked = _config.QuotaHudVisible;
                 if (committed || (_hudDirtyFields & 16) == 0) _hudTopMost.Checked = _config.QuotaHudTopMost;
+                if (_hudPreview != null) _hudPreview.ChartExpanded = _config.QuotaHudChartExpanded;
                 if (committed) _hudDirtyFields = 0;
             }
             finally { _loadingHudSettings = false; }
