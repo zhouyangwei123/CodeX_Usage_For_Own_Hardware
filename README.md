@@ -1,12 +1,12 @@
 # CodeX Usage
 
-Windows 上位机与 STM32G474 桌面工具的联合仓库。上位机当前版本：0.4.1。
+Windows 上位机与 STM32G474 桌面工具的联合仓库。上位机当前版本：0.4.2。
 
 远端：https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware
 
 先阅读 [README_先看.md](README_先看.md)，开发接手阅读 [CODEX_接手说明.md](CODEX_接手说明.md)。
 
-Windows 便携发布包见 [0.4.1 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.4.1)。最新验证结果见 [0.4.1 验证记录](docs/VALIDATION-0.4.1.md)。
+Windows 便携发布包见 [0.4.2 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.4.2)。最新验证结果见 [0.4.2 验证记录](docs/VALIDATION-0.4.2.md)。
 
 - `host/`：WinForms 上位机，额度监控、电脑指标、按键/编码器配置与可选集成。
 - `firmware/STM32G474/`：CubeIDE 固件工程，2026-09-24 原样导入。
@@ -27,11 +27,11 @@ Windows 便携发布包见 [0.4.1 Release](https://github.com/zhouyangwei123/Cod
 
 本地 `baseline` 分支保存导入时的工程，后续更改在功能分支进行。导入提交由 Codex 工具署名，不修改用户全局 Git 身份。
 
-## 0.4.1 的主要变化
+## 0.4.2 的主要变化
 
-- 取消“始终置顶”后，点击浮窗可正常激活并前置。
-- 单击托盘图标，或右击选择“找回浮窗（恢复并前置）”，可恢复被遮挡、隐藏或最小化的浮窗；不会重新开启置顶。
-- 最小化不再覆盖已保存位置或继续绘制；后台显示与尺寸同步保持不抢焦点。双击托盘仍打开设置。
+- 浮窗不保留最小化状态；取消置顶后允许普通应用遮挡，自动维持在桌面之上。
+- 移除 0.4.1 新增的找回菜单与托盘单击行为，保留原有显示/隐藏选项及双击打开设置。
+- 桌面层级变化由现有一秒刷新周期检查，不抢焦点、不自动开启置顶。点击非置顶浮窗仍能正常激活。
 
 ## 0.4.0 的主要变化
 

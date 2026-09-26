@@ -26,6 +26,9 @@ internal static class HudActivationTests
     [DllImport("user32.dll")] static extern IntPtr GetActiveWindow();
     [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr handle,int index);
     [DllImport("user32.dll")] static extern bool IsIconic(IntPtr handle);
+    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr handle,int command);
+    [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr handle,IntPtr after,int x,int y,int w,int h,uint flags);
+    [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr handle,uint command);
     [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr handle,int message,IntPtr wparam,IntPtr lparam);
     static void Check(bool ok,string name){checks++;Console.WriteLine((ok?"PASS ":"FAIL ")+name);if(!ok)failures++;}
     static object Field(object o,string n){return o.GetType().GetField(n,Flags).GetValue(o);}
@@ -75,21 +78,26 @@ internal static class HudActivationTests
                 Check(SendMessage(hud.Handle,0x21,IntPtr.Zero,IntPtr.Zero)==new IntPtr(3),prefix+"pinned clicks preserve focus");
                 config.QuotaHudTopMost=false;hud.ApplyDisplaySettings();Pump(10);
                 Check((GetWindowLong(hud.Handle,-20)&0x08000000)==0,prefix+"unpin removes no-activate style on existing HWND");
+                Check(((System.Windows.Forms.Timer)Field(hud,"_displayTimer")).Enabled,prefix+"desktop floor upkeep is independent of API balance provider");
                 Check(SendMessage(hud.Handle,0x21,IntPtr.Zero,IntPtr.Zero)==new IntPtr(1),prefix+"unpinned clicks request normal activation");
                 blocker.Activate();Pump(10);hud.ShowFromTray();Pump(10);
-                Check(GetActiveWindow()==hud.Handle,prefix+"explicit tray recovery activates covered HUD");
-                Check(!hud.TopMost&&!config.QuotaHudTopMost,prefix+"recovery never turns always-on-top back on");
+                Check(GetActiveWindow()==hud.Handle,prefix+"explicit visibility action activates unpinned HUD");
+                Check(!hud.TopMost&&!config.QuotaHudTopMost,prefix+"show never turns always-on-top back on");
                 hud.Location=new Point(100,180);Call(hud,"SavePosition");int? savedX=config.QuotaHudX,savedY=config.QuotaHudY;
                 hud.WindowState=FormWindowState.Minimized;Pump(25);
-                Check(IsIconic(hud.Handle),prefix+"native minimized state reproduced");
+                Check(!IsIconic(hud.Handle)&&hud.WindowState==FormWindowState.Normal,prefix+"managed minimization cannot leave HUD iconic");
                 Call(hud,"SavePosition");
                 Check(config.QuotaHudX==savedX&&config.QuotaHudY==savedY,prefix+"iconic coordinates never overwrite saved position");
-                if(activity)Check(!((System.Windows.Forms.Timer)Field(hud,"_activityTimer")).Enabled,prefix+"minimized view stops activity timer");
+                if(activity)Check(((System.Windows.Forms.Timer)Field(hud,"_activityTimer")).Enabled,prefix+"minimize attempt leaves activity view running");
                 blocker.Activate();
+                SendMessage(hud.Handle,0x112,new IntPtr(0xF020),IntPtr.Zero);Pump(10);
+                Check(!IsIconic(hud.Handle)&&GetActiveWindow()==blocker.Handle,prefix+"system minimize is rejected without focus change");
+                ShowWindow(hud.Handle,7);Pump(10);
+                Check(!IsIconic(hud.Handle)&&GetActiveWindow()==blocker.Handle,prefix+"native nonactivating minimize returns to normal without focus change");
                 var passiveMinimized=typeof(QuotaHudForm).GetMethod("ShowPassive");
-                if(passiveMinimized!=null){passiveMinimized.Invoke(hud,null);Pump(10);Check(IsIconic(hud.Handle)&&GetActiveWindow()==blocker.Handle,prefix+"passive synchronization preserves minimized state and focus");}
+                if(passiveMinimized!=null){passiveMinimized.Invoke(hud,null);Pump(10);Check(!IsIconic(hud.Handle)&&GetActiveWindow()==blocker.Handle,prefix+"passive synchronization preserves normal state and focus");}
                 hud.ShowFromTray();Pump(20);
-                Check(hud.WindowState==FormWindowState.Normal&&!IsIconic(hud.Handle)&&hud.Visible,prefix+"tray recovery restores minimized HUD");
+                Check(hud.WindowState==FormWindowState.Normal&&!IsIconic(hud.Handle)&&hud.Visible,prefix+"HUD remains visible in normal state");
                 Check(hud.ClientSize==(activity?new Size(420,300):new Size(320,138)),prefix+"restored renderer retains full dimensions");
                 if(activity)Check(((System.Windows.Forms.Timer)Field(hud,"_activityTimer")).Enabled,prefix+"restored view restarts activity timer");
                 hud.HideFromTray();blocker.Activate();Pump(10);hud.ShowFromTray();Pump(10);
@@ -111,11 +119,19 @@ internal static class HudActivationTests
                 }finally{Marshal.FreeHGlobal(limits);}
                 blocker.Activate();Call(hud,"RequestRender");Pump(10);
                 Check(GetActiveWindow()==blocker.Handle,prefix+"background repaint does not steal focus");
+                TestDesktopFloor(hud,blocker,prefix);
+                hud.Location=new Point(100,180);Call(hud,"SavePosition");
+                hud.WindowState=FormWindowState.Minimized;
+                hud.ApplyDisplaySettings();Pump(30);
+                Check(hud.Location==new Point(100,180)&&hud.ClientSize==(activity?new Size(420,300):new Size(320,138)),prefix+"settings during pending normalization preserve full size and location");
                 config.QuotaHudTopMost=true;hud.ApplyDisplaySettings();Pump(10);
                 Check((GetWindowLong(hud.Handle,-20)&0x08000000)!=0,prefix+"repin restores no-activate style");
                 hud.WindowState=FormWindowState.Minimized;blocker.Activate();Pump(10);hud.ShowFromTray();Pump(10);
                 Check(!IsIconic(hud.Handle)&&GetActiveWindow()==blocker.Handle,prefix+"pinned recovery restores without activating");
                 Check(hud.TopMost&&(GetWindowLong(hud.Handle,-20)&8)!=0,prefix+"pinned recovery retains native topmost band");
+                hud.WindowState=FormWindowState.Minimized;hud.HideFromTray();Pump(30);
+                Check(!hud.Visible,prefix+"queued normalization respects a subsequent intentional hide");
+                Check(!((System.Windows.Forms.Timer)Field(hud,"_displayTimer")).Enabled,prefix+"hidden HUD stops periodic maintenance");
                 hud.BeginShutdown();
             }
         }
@@ -126,16 +142,49 @@ internal static class HudActivationTests
         {
             var hud=(QuotaHudForm)Field(tray,"_quotaHud");
             MethodInfo restore=typeof(TrayApp).GetMethod("RestoreQuotaHud",Flags);
-            Check(restore!=null,"tray exposes a deterministic restore command");
-            if(restore!=null){restore.Invoke(tray,null);Check(hud.Visible&&trayConfig.QuotaHudVisible,"restore command shows hidden HUD");}
+            Check(restore==null,"no separate restore command");
             FieldInfo item=typeof(TrayApp).GetField("_restoreQuotaHudItem",Flags);
-            Check(item!=null,"restore command has a visible tray menu entry");
-            if(item!=null){hud.WindowState=FormWindowState.Minimized;Pump(10);((ToolStripMenuItem)item.GetValue(tray)).PerformClick();Pump(10);Check(hud.WindowState==FormWindowState.Normal,"restore menu restores rather than hides minimized HUD");}
+            Check(item==null,"no added restore menu entry");
             MethodInfo click=typeof(TrayApp).GetMethod("OnTrayMouseClick",Flags);
-            Check(click!=null,"tray left click has restore handler");
-            if(click!=null){hud.HideFromTray();click.Invoke(tray,new object[]{null,new MouseEventArgs(MouseButtons.Left,1,0,0,0)});Pump(10);Check(hud.Visible&&GetActiveWindow()==hud.Handle,"tray left click raises HUD");}
-            hud.ShowFromTray();hud.WindowState=FormWindowState.Minimized;Pump(10);Call(tray,"ToggleQuotaHud");Pump(10);
-            Check(hud.Visible&&hud.WindowState==FormWindowState.Normal&&trayConfig.QuotaHudVisible,"visibility toggle recovers minimized HUD in one click");
+            Check(click==null,"no added tray single-click behavior");
+            Call(tray,"ToggleQuotaHud");Pump(10);
+            Check(hud.Visible&&trayConfig.QuotaHudVisible,"existing visibility toggle shows HUD");
+            Call(tray,"ToggleQuotaHud");Pump(1100);
+            Check(!hud.Visible&&!trayConfig.QuotaHudVisible,"intentional hide stays hidden after maintenance tick");
+        }
+    }
+    static bool Above(IntPtr a,IntPtr b){for(IntPtr h=GetWindow(a,2);h!=IntPtr.Zero;h=GetWindow(h,2))if(h==b)return true;return false;}
+    static void TestDesktopFloor(QuotaHudForm hud,Form blocker,string prefix)
+    {
+        Type layer=typeof(QuotaHudForm).Assembly.GetType("CodexToolsHost.UI.HudDesktopLayer");
+        Check(layer!=null,prefix+"desktop floor policy exists");if(layer==null)return;
+        MethodInfo raise=layer.GetMethod("RaiseAbove",Flags);
+        using(var desktop=new Form{Text="Desktop surface fixture",ShowInTaskbar=false})
+        {
+            desktop.Show();blocker.Activate();
+            SetWindowPos(desktop.Handle,blocker.Handle,0,0,0,0,0x13);
+            SetWindowPos(hud.Handle,desktop.Handle,0,0,0,0,0x13);
+            Check(Above(desktop.Handle,hud.Handle),prefix+"desktop coverage reproduced using real HWND order");
+            raise.Invoke(null,new object[]{hud.Handle,desktop.Handle});
+            Check(Above(hud.Handle,desktop.Handle),prefix+"HUD moves above desktop floor");
+            Check(Above(blocker.Handle,hud.Handle),prefix+"ordinary app above desktop stays above HUD");
+            Check(GetActiveWindow()==blocker.Handle&&(GetWindowLong(hud.Handle,-20)&8)==0,prefix+"desktop correction neither activates nor pins HUD");
+            SetWindowPos(hud.Handle,IntPtr.Zero,0,0,0,0,0x13);
+            raise.Invoke(null,new object[]{hud.Handle,desktop.Handle});
+            Check(Above(hud.Handle,blocker.Handle),prefix+"valid HUD order is left alone");
+            hud.Hide();raise.Invoke(null,new object[]{hud.Handle,desktop.Handle});
+            Check(!hud.Visible,prefix+"desktop correction cannot undo intentional hide");hud.ShowPassive();
+            desktop.TopMost=true;blocker.TopMost=true;
+            SetWindowPos(desktop.Handle,blocker.Handle,0,0,0,0,0x13);
+            raise.Invoke(null,new object[]{hud.Handle,desktop.Handle});
+            Check((GetWindowLong(hud.Handle,-20)&8)==0,prefix+"unexpected topmost floor never promotes unpinned HUD");
+            desktop.TopMost=false;blocker.TopMost=false;
+            blocker.TopMost=true;
+            SetWindowPos(desktop.Handle,IntPtr.Zero,0,0,0,0,0x13);
+            SetWindowPos(hud.Handle,desktop.Handle,0,0,0,0,0x13);
+            raise.Invoke(null,new object[]{hud.Handle,desktop.Handle});
+            Check(Above(blocker.Handle,hud.Handle)&&Above(hud.Handle,desktop.Handle)&&(GetWindowLong(hud.Handle,-20)&8)==0,prefix+"floor next to topmost band keeps HUD non-topmost");
+            blocker.TopMost=false;
         }
     }
     sealed class Metrics:IPcMetricsProvider{public PcMetricsSnapshot Read(){return PcMetricsSnapshot.CreateUnavailable("fixture",DateTimeOffset.UtcNow);}}

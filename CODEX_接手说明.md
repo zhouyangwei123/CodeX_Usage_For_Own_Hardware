@@ -5,7 +5,7 @@
 - 仓库远端：`https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware.git`。
 - 导入基线：`a0d159f`，标签 `baseline-2026-09-24`。
 - 上位机修复提交：`4b062f5`；界面与配置改进提交：`497c023`。
-- 上位机 .NET Framework 4.8 / WinForms，发布版本 0.4.1，单 EXE。
+- 上位机 .NET Framework 4.8 / WinForms，发布版本 0.4.2，单 EXE。
 - 原始固件 152 文件逐字节导入。遵守 `AGENTS.md` 的本轮固件冻结约束。
 
 ## 核心设计
@@ -58,7 +58,7 @@ GUI EXE 自检需使用 `Start-Process -Wait -PassThru -WindowStyle Hidden` 并�
 
 当前项目内 `artifacts/` 是本地验证记录，包含运行日志、离屏图及发布测试快照，默认不上传。公开验证摘要不得包含账户标识、API Key、认证日志或私人会话内容。
 
-0.4.1 验收结果以 `docs/VALIDATION-0.4.1.md` 为准，0.4.0、0.3.0 与 0.2.0 的历史验证记录继续保留。不将旧版本持续时长套用到新版。固件和物理设备验收始终独立记录。
+0.4.2 验证结果以 `docs/VALIDATION-0.4.2.md` 为准，旧版本的历史验证记录继续保留。不将旧版本持续时长套用到新版。固件和物理设备验收始终独立记录。
 
 0.3.0 配置版本为 10，新增 `quotaHudStyle` 与 `updateChecksEnabled`，旧字段和密钥保留。`TrayApp` 独占两个新服务的生命周期；设置面板只订阅、取消订阅。HUD 不得重新使用 Region/Form.Opacity/颜色键；原生回退、无空闲装饰动画和 GDI 资源释放必须继续测试。
 
@@ -66,4 +66,4 @@ GUI EXE 自检需使用 `Start-Process -Wait -PassThru -WindowStyle Hidden` 并�
 
 0.4.0 配置版本为 11，新增 `quotaHudChartExpanded`。`UsageActivity.Create(report, now)` 是纯数值投影，使用事件原始时间、前 60 秒滚动窗口和 10 秒图表端点，不读取磁盘或查询接口。`UsageReport.RecentActivity` 只保留时间及输入/输出数值。新布局由 `QuotaHudActivityRenderer` 负责，`QuotaHudActivity` 负责共享服务订阅、折叠保存与视图定时器；不让 HUD 拥有/释放 `LocalUsageService`。旧构造和旧渲染入口仅用于兼容已有调用，正式托盘传入共享服务使用新布局。详细口径见 `docs/TOKEN_ACTIVITY.md`。
 
-0.4.1 区分主动找回 `ShowFromTray()` 与后台显示 `ShowPassive()`。`WS_EX_NOACTIVATE` 和 `WM_MOUSEACTIVATE` 的策略必须随置顶选项同步；不要为了找回临时启用 TopMost。最小化时跳过位置持久化、绘制和视图计时器。Framework 的 `MinimumSize` setter 会激活已有 HWND，固定跟踪尺寸改由 `WM_GETMINMAXINFO` 提供，避免被动尺寸同步抢焦点。激活测试在独立的非显示桌面上验证，不操作用户桌面。
+0.4.2 撤销上一版新增的找回菜单与托盘单击行为。HUD 拦截 SC_MINIMIZE；直接原生/托管最小化在消息完成后以 SW_SHOWNOACTIVATE 归位，避免 Form.WindowState setter 覆盖嵌套 WM_SIZE 的结果。`HudDesktopLayer` 在现有一秒显示周期中只检查 Explorer 桌面下限，保持普通应用覆盖与手动隐藏，不创建新计时器或注入 Explorer。层级判定兼容 Progman 与同进程内承载 SHELLDLL_DefView 的 WorkerW；只移动自有 HUD，不更改桌面窗口或所有者。`WS_EX_NOACTIVATE` / `WM_MOUSEACTIVATE` 随置顶设置同步。Framework 的 `MinimumSize` setter 会激活已有 HWND，固定尺寸继续由 `WM_GETMINMAXINFO` 提供。原生测试在独立的非显示桌面执行；实际 Win+D 体验需另行确认。

@@ -16,6 +16,7 @@ namespace CodexToolsHost.UI
         private const int WM_MOUSEACTIVATE = 0x0021;
         private const int WM_NCLBUTTONDBLCLK = 0x00A3;
         private const int WM_GETMINMAXINFO = 0x0024;
+        private const int WM_SYSCOMMAND = 0x0112;
         private const int HTCLIENT = 1;
         private const int HTCAPTION = 2;
         private const int MA_ACTIVATE = 1;
@@ -58,6 +59,7 @@ namespace CodexToolsHost.UI
         private bool _frameDirty = true;
         private bool _nativeFallback;
         private bool _presenting;
+        private bool _restoreQueued;
         private DateTimeOffset _refreshDeadline;
         private volatile bool _shutdown;
 
@@ -124,8 +126,9 @@ namespace CodexToolsHost.UI
             _displayTimer.Interval = 1000;
             _displayTimer.Tick += delegate
             {
-                if (_shutdown || !Visible || !_apiIsOpenCodeGo) return;
-                if (UpdateApiSnapshot()) RequestRender();
+                if (_shutdown || !Visible) return;
+                if (!TopMost) HudDesktopLayer.EnsureAboveDesktop(Handle);
+                if (_apiIsOpenCodeGo && UpdateApiSnapshot()) RequestRender();
             };
 
             _source.Changed += OnSourceChanged;
@@ -154,12 +157,14 @@ namespace CodexToolsHost.UI
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
+            HudDesktopLayer.ExcludeFromPeek(Handle);
             RefreshNetworkFromBridgeOnUiThread();
             RequestRender();
         }
 
         protected override void OnHandleDestroyed(EventArgs e)
         {
+            _restoreQueued = false;
             _animationTimer.Stop();
             _displayTimer.Stop();
             _activityTimer.Stop();
@@ -187,16 +192,6 @@ namespace CodexToolsHost.UI
                 catch (InvalidOperationException) { }
                 return;
             }
-            if (WindowState != FormWindowState.Normal)
-            {
-                // Passive synchronization must respect the user's minimized window.
-                // Form.WindowState=Normal activates even a no-activate HWND; use the
-                // native nonactivating restore, then activate only explicit unpinned
-                // recovery below. WM_SIZE synchronizes the managed window state.
-                if (!bringForward) return;
-                if (IsHandleCreated) ShowWindow(Handle, 4 /* SW_SHOWNOACTIVATE */);
-                else WindowState = FormWindowState.Normal;
-            }
             ApplyDisplaySettings();
             _snapshot = _source.Quota ?? QuotaSnapshot.EmptyStale();
             UpdateApiSnapshot();
@@ -204,8 +199,7 @@ namespace CodexToolsHost.UI
             if (!Visible) Show();
             if (bringForward)
             {
-                // Form.BringToFront also activates a top-level window. Raise within
-                // the existing z-order band without focusing a pinned HUD.
+                // Showing through the existing visibility option is a user action.
                 SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, 0x0013 /* NOSIZE | NOMOVE | NOACTIVATE */);
                 if (!_config.QuotaHudTopMost) Activate();
             }
@@ -215,15 +209,9 @@ namespace CodexToolsHost.UI
         public void ApplyDisplaySettings()
         {
             if (_shutdown || IsDisposed) return;
+            NormalizeWindowState();
             // Apply only changed window preferences during passive synchronization.
             if (TopMost != _config.QuotaHudTopMost) TopMost = _config.QuotaHudTopMost;
-            if (WindowState != FormWindowState.Normal)
-            {
-                // An iconic window's Bounds are not its desktop position. Reconcile
-                // styles now; ShowHud applies geometry after restoring normal state.
-                UpdateStyles();
-                return;
-            }
             Point anchor = new Point(Right, Bottom);
             Size target = GetScaledWindowSize();
             bool sizeChanged = ClientSize != target;
@@ -232,6 +220,8 @@ namespace CodexToolsHost.UI
                 Location = new Point(anchor.X - Width, anchor.Y - Height);
             Bounds = QuotaHudPresentation.EnsureVisible(Bounds, GetWorkingAreas());
             UpdateStyles();
+            UpdateTimers();
+            if (Visible && !TopMost) HudDesktopLayer.EnsureAboveDesktop(Handle);
             UpdateApiSnapshot();
             if (_initialized) SavePosition();
             RequestRender();
@@ -317,8 +307,28 @@ namespace CodexToolsHost.UI
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
+            // A HUD has no minimized state. SC_MINIMIZE is blocked below; direct
+            // native ShowWindow calls must also leave it normal, without focus.
+            if (!_shutdown && !_restoreQueued && IsHandleCreated && WindowState == FormWindowState.Minimized)
+            {
+                // Finish the original Form.WindowState setter first, otherwise
+                // it overwrites the normal state reported by the nested WM_SIZE.
+                _restoreQueued = true;
+                BeginInvoke(new Action(delegate
+                {
+                    _restoreQueued = false;
+                    NormalizeWindowState();
+                }));
+            }
             if (_config != null) UpdateTimers();
             RequestRender();
+        }
+
+        private void NormalizeWindowState()
+        {
+            if (_shutdown || IsDisposed || !IsHandleCreated || WindowState != FormWindowState.Minimized) return;
+            if (Visible) ShowWindow(Handle, 4 /* SW_SHOWNOACTIVATE */);
+            else WindowState = FormWindowState.Normal;
         }
 
         protected override void OnPaintBackground(PaintEventArgs e)
@@ -359,6 +369,8 @@ namespace CodexToolsHost.UI
 
         protected override void WndProc(ref Message message)
         {
+            if (message.Msg == WM_SYSCOMMAND && (message.WParam.ToInt64() & 0xFFF0) == 0xF020 /* SC_MINIMIZE */)
+            { message.Result = IntPtr.Zero; return; }
             if (message.Msg == WM_GETMINMAXINFO && _config != null && message.LParam != IntPtr.Zero)
             {
                 base.WndProc(ref message);
@@ -730,8 +742,8 @@ namespace CodexToolsHost.UI
             _animationTimer.Enabled = presented && _refreshing;
             _activityTimer.Enabled = presented && _usage != null;
             OpenCodeGoQuotaSnapshot go = _openCodeGoSource == null ? null : _openCodeGoSource.Quota;
-            _displayTimer.Enabled = presented && _apiIsOpenCodeGo && go != null
-                && go.Rolling.ResetsAt.HasValue && go.Rolling.ResetsAt.Value > DateTimeOffset.UtcNow;
+            _displayTimer.Enabled = presented && (!TopMost || (_apiIsOpenCodeGo && go != null
+                && go.Rolling.ResetsAt.HasValue && go.Rolling.ResetsAt.Value > DateTimeOffset.UtcNow));
         }
     }
 }
