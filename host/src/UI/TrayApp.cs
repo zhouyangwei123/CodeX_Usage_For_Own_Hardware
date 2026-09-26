@@ -21,6 +21,7 @@ namespace CodexToolsHost.UI
         private SettingsForm _settingsForm;
         private QuotaHudForm _quotaHud;
         private ToolStripMenuItem _quotaHudItem;
+        private ToolStripMenuItem _restoreQuotaHudItem;
         private ToolStripMenuItem _quotaHudSizeItem;
         private ToolStripMenuItem _quotaHudOpacityItem;
         private ToolStripMenuItem _quotaHudTopMostItem;
@@ -60,6 +61,7 @@ namespace CodexToolsHost.UI
             _updateItem = new ToolStripMenuItem("软件更新…");
             var refreshItem = new ToolStripMenuItem("刷新额度");
             _quotaHudItem = new ToolStripMenuItem("显示额度与 API 余额");
+            _restoreQuotaHudItem = new ToolStripMenuItem("找回浮窗（恢复并前置）");
             _quotaHudSizeItem = new ToolStripMenuItem("血条尺寸");
             AddScaleOption(_quotaHudSizeItem, "60%", 60);
             AddScaleOption(_quotaHudSizeItem, "75%", 75);
@@ -98,6 +100,7 @@ namespace CodexToolsHost.UI
                 _updateItem,
                 refreshItem,
                 _quotaHudItem,
+                _restoreQuotaHudItem,
                 _quotaHudStyleItem,
                 _quotaHudChartItem,
                 _quotaHudSizeItem,
@@ -113,11 +116,13 @@ namespace CodexToolsHost.UI
 
             menu.Opening += delegate { UpdateHudMenuChecks(); };
             _icon.DoubleClick += delegate { SafeInvoke(OpenSettings); };
+            _icon.MouseClick += OnTrayMouseClick;
 
             settingsItem.Click += delegate { OpenSettings(); };
             _updateItem.Click += delegate { OpenSettings(); _settingsForm.ShowUpdates(); };
             refreshItem.Click += delegate { _bridge.RefreshQuota(); };
             _quotaHudItem.Click += delegate { ToggleQuotaHud(); };
+            _restoreQuotaHudItem.Click += delegate { RestoreQuotaHud(); };
             _quotaHudChartItem.Click += delegate { if (_quotaHud != null) _quotaHud.ToggleChart(); };
             _quotaHudTopMostItem.Click += delegate
             {
@@ -146,7 +151,7 @@ namespace CodexToolsHost.UI
             _quotaHud = new QuotaHudForm(_config, _bridge.Codex, _bridge.DeepSeek,
                 delegate { _bridge.RefreshQuota(); }, _bridge, _usage);
             _quotaHud.ChartExpansionChanged += delegate { UpdateHudMenuChecks(); SyncSettingsHud(); };
-            if (_config.QuotaHudVisible) _quotaHud.ShowFromTray();
+            if (_config.QuotaHudVisible) _quotaHud.ShowPassive();
             _usage.Start();
             _updates.Changed += OnUpdateChanged;
             _updates.Start(_config.UpdateChecksEnabled);
@@ -213,10 +218,25 @@ namespace CodexToolsHost.UI
             _settingsForm.BringToFront();
         }
 
+        private void OnTrayMouseClick(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Left) SafeInvoke(RestoreQuotaHud);
+        }
+
+        private void RestoreQuotaHud()
+        {
+            if (_exiting || _quotaHud == null || _quotaHud.IsDisposed) return;
+            _quotaHud.ShowFromTray();
+            _config.QuotaHudVisible = true;
+            UpdateHudMenuChecks();
+            SaveConfigQuietly();
+            SyncSettingsHud();
+        }
+
         private void ToggleQuotaHud()
         {
             if (_quotaHud == null) return;
-            if (_quotaHud.Visible)
+            if (_quotaHud.Visible && _quotaHud.WindowState == FormWindowState.Normal)
             {
                 _quotaHud.HideFromTray();
                 _config.QuotaHudVisible = false;
@@ -262,7 +282,7 @@ namespace CodexToolsHost.UI
         {
             if (_quotaHud == null) return;
             _quotaHud.ApplyDisplaySettings();
-            if (_config.QuotaHudVisible) _quotaHud.ShowFromTray(); else _quotaHud.HideFromTray();
+            if (_config.QuotaHudVisible) _quotaHud.ShowPassive(); else _quotaHud.HideFromTray();
             UpdateHudMenuChecks();
         }
 

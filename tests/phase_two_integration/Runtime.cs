@@ -27,6 +27,7 @@ internal static class Runtime
         string directory = args[0]; int seconds = int.Parse(args[1]); Directory.CreateDirectory(directory);
         var json = new JavaScriptSerializer(); var rows = new List<object>();
         var config = AppConfig.Load(directory, directory); config.Mijia.AutoRefresh = false; config.QuotaHudStyle = "glass";
+        if(args.Length>2&&args[2]=="unpinned")config.QuotaHudTopMost=false;
         var source = CodexStatusProvider.CreateDefault(30); var device = new MockDeviceLink();
         var pc = new PcMonitorService(new WindowsPcMetricsProvider(), 2000);
         ConstructorInfo constructor = null;
@@ -87,7 +88,7 @@ internal static class Runtime
                 staleAfterWarmup = staleAfterWarmup, automaticReconnects = source.ReconnectCount,
                 usageFiles = usage.Report.FilesDiscovered, usagePending = usage.Report.FilesPending,
                 updateState = release.Snapshot.State.ToString(), nativeGlass = nativeGlass,
-                activityUpdates=activityUpdates,activityStatus=finalActivity.Status,chartPoints=finalActivity.Points.Count,chartToggles=toggles,
+                activityUpdates=activityUpdates,activityStatus=finalActivity.Status,chartPoints=finalActivity.Points.Count,chartToggles=toggles,topMost=config.QuotaHudTopMost,
                 hardwareUsed = false, visibleDesktopWindows = false, assembly = typeof(BridgeService).Assembly.Location };
             File.WriteAllText(Path.Combine(directory, "summary.json"), json.Serialize(summary)); Console.WriteLine(json.Serialize(summary));
         }

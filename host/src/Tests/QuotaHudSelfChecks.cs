@@ -346,7 +346,7 @@ namespace CodexToolsHost.Tests
                     && form.ClientSize == new Size(240, 104)
                     && form.AutoScaleMode == AutoScaleMode.None
                     && !form.MaximizeBox && !form.MinimizeBox
-                    && form.MinimumSize == form.Size
+                    && form.MinimumSize.IsEmpty
                     && form.MaximumSize == form.Size;
                 MethodInfo applySettings = formType.GetMethod("ApplyDisplaySettings",
                     BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -418,7 +418,7 @@ namespace CodexToolsHost.Tests
                 config.QuotaHudTopMost = i != 0;
                 applySettings.Invoke(form, null);
                 allOk = allOk && form.ClientSize == expectedClients[i]
-                    && form.MinimumSize == form.Size && form.MaximumSize == form.Size
+                    && form.MinimumSize.IsEmpty && form.MaximumSize == form.Size
                     && form.Region == null
                     && nativeAlpha != null
                     && (byte)nativeAlpha.GetValue(form, null) == (byte)(SystemInformation.HighContrast ? 255 : Math.Round(config.QuotaHudOpacity * 255))

@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using CodexToolsHost.Core;
 using CodexToolsHost.Model;
@@ -14,8 +15,10 @@ namespace CodexToolsHost.UI
         private const int WM_NCHITTEST = 0x0084;
         private const int WM_MOUSEACTIVATE = 0x0021;
         private const int WM_NCLBUTTONDBLCLK = 0x00A3;
+        private const int WM_GETMINMAXINFO = 0x0024;
         private const int HTCLIENT = 1;
         private const int HTCAPTION = 2;
+        private const int MA_ACTIVATE = 1;
         private const int MA_NOACTIVATE = 3;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
         private const int WS_EX_NOACTIVATE = 0x08000000;
@@ -140,7 +143,9 @@ namespace CodexToolsHost.UI
             get
             {
                 CreateParams parameters = base.CreateParams;
-                parameters.ExStyle |= WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+                parameters.ExStyle |= WS_EX_TOOLWINDOW;
+                if (_config == null || _config.QuotaHudTopMost) parameters.ExStyle |= WS_EX_NOACTIVATE;
+                else parameters.ExStyle &= ~WS_EX_NOACTIVATE;
                 if (!UsesOpaqueFallback) parameters.ExStyle |= LayeredWindowSurface.ExtendedStyle;
                 return parameters;
             }
@@ -164,33 +169,65 @@ namespace CodexToolsHost.UI
         }
 
         public void ShowFromTray()
+        { ShowHud(true); }
+
+        // Startup/settings synchronization must not take focus from another app.
+        public void ShowPassive()
+        { ShowHud(false); }
+
+        private void ShowHud(bool bringForward)
         {
             if (_shutdown || IsDisposed) return;
             if (System.Threading.Thread.CurrentThread.ManagedThreadId != _uiThreadId)
             {
                 try
                 {
-                    if (IsHandleCreated) BeginInvoke(new Action(ShowFromTray));
+                    if (IsHandleCreated) BeginInvoke(new Action(delegate { ShowHud(bringForward); }));
                 }
                 catch (InvalidOperationException) { }
                 return;
+            }
+            if (WindowState != FormWindowState.Normal)
+            {
+                // Passive synchronization must respect the user's minimized window.
+                // Form.WindowState=Normal activates even a no-activate HWND; use the
+                // native nonactivating restore, then activate only explicit unpinned
+                // recovery below. WM_SIZE synchronizes the managed window state.
+                if (!bringForward) return;
+                if (IsHandleCreated) ShowWindow(Handle, 4 /* SW_SHOWNOACTIVATE */);
+                else WindowState = FormWindowState.Normal;
             }
             ApplyDisplaySettings();
             _snapshot = _source.Quota ?? QuotaSnapshot.EmptyStale();
             UpdateApiSnapshot();
             RefreshNetworkFromBridgeOnUiThread();
             if (!Visible) Show();
+            if (bringForward)
+            {
+                // Form.BringToFront also activates a top-level window. Raise within
+                // the existing z-order band without focusing a pinned HUD.
+                SetWindowPos(Handle, IntPtr.Zero, 0, 0, 0, 0, 0x0013 /* NOSIZE | NOMOVE | NOACTIVATE */);
+                if (!_config.QuotaHudTopMost) Activate();
+            }
             RequestRender();
         }
 
         public void ApplyDisplaySettings()
         {
             if (_shutdown || IsDisposed) return;
+            // Apply only changed window preferences during passive synchronization.
+            if (TopMost != _config.QuotaHudTopMost) TopMost = _config.QuotaHudTopMost;
+            if (WindowState != FormWindowState.Normal)
+            {
+                // An iconic window's Bounds are not its desktop position. Reconcile
+                // styles now; ShowHud applies geometry after restoring normal state.
+                UpdateStyles();
+                return;
+            }
             Point anchor = new Point(Right, Bottom);
             Size target = GetScaledWindowSize();
             bool sizeChanged = ClientSize != target;
-            ApplyWindowSize(target);
-            TopMost = _config.QuotaHudTopMost;
+            if (sizeChanged) ApplyWindowSize(target);
             if (sizeChanged)
                 Location = new Point(anchor.X - Width, anchor.Y - Height);
             Bounds = QuotaHudPresentation.EnsureVisible(Bounds, GetWorkingAreas());
@@ -273,12 +310,14 @@ namespace CodexToolsHost.UI
             base.OnMove(e);
             if (!_initialized || _shutdown) return;
             _positionTimer.Stop();
+            if (WindowState != FormWindowState.Normal) return;
             _positionTimer.Start();
         }
 
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
+            if (_config != null) UpdateTimers();
             RequestRender();
         }
 
@@ -320,9 +359,20 @@ namespace CodexToolsHost.UI
 
         protected override void WndProc(ref Message message)
         {
+            if (message.Msg == WM_GETMINMAXINFO && _config != null && message.LParam != IntPtr.Zero)
+            {
+                base.WndProc(ref message);
+                var limits = (HudMinMaxInfo)Marshal.PtrToStructure(message.LParam, typeof(HudMinMaxInfo));
+                Size fixedSize = GetScaledWindowSize();
+                limits.MinTrack = new HudNativePoint { X = fixedSize.Width, Y = fixedSize.Height };
+                limits.MaxTrack = limits.MinTrack;
+                Marshal.StructureToPtr(limits, message.LParam, false);
+                message.Result = IntPtr.Zero;
+                return;
+            }
             if (message.Msg == WM_MOUSEACTIVATE)
             {
-                message.Result = (IntPtr)MA_NOACTIVATE;
+                message.Result = (IntPtr)(_config == null || _config.QuotaHudTopMost ? MA_NOACTIVATE : MA_ACTIVATE);
                 return;
             }
             if (message.Msg == WM_NCLBUTTONDBLCLK)
@@ -549,12 +599,22 @@ namespace CodexToolsHost.UI
 
         private void ApplyWindowSize(Size target)
         {
-            MinimumSize = Size.Empty;
+            // Framework's MinimumSize setter activates an existing HWND. Fixed
+            // native tracking limits are supplied via WM_GETMINMAXINFO instead.
             MaximumSize = Size.Empty;
             ClientSize = target;
-            MinimumSize = Size;
             MaximumSize = Size;
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct HudNativePoint { public int X, Y; }
+        [StructLayout(LayoutKind.Sequential)]
+        private struct HudMinMaxInfo
+        { public HudNativePoint Reserved, MaxSize, MaxPosition, MinTrack, MaxTrack; }
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr window, int command);
+        [DllImport("user32.dll")]
+        private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 
         private Size CanonicalWindowSize()
         {
@@ -587,7 +647,7 @@ namespace CodexToolsHost.UI
 
         private void SavePosition()
         {
-            if (_shutdown && IsDisposed) return;
+            if ((_shutdown && IsDisposed) || WindowState != FormWindowState.Normal) return;
             try
             {
                 _config.QuotaHudX = Left;
@@ -634,7 +694,7 @@ namespace CodexToolsHost.UI
         private void RequestRender()
         {
             _frameDirty = true;
-            if (_config == null || _shutdown || IsDisposed || !Visible || !IsHandleCreated
+            if (_config == null || _shutdown || IsDisposed || !Visible || WindowState != FormWindowState.Normal || !IsHandleCreated
                 || _presenting || ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
             _presenting = true;
             try
@@ -666,10 +726,11 @@ namespace CodexToolsHost.UI
         private void UpdateTimers()
         {
             if (_shutdown || IsDisposed) return;
-            _animationTimer.Enabled = Visible && _refreshing;
-            _activityTimer.Enabled = Visible && _usage != null;
+            bool presented = Visible && WindowState == FormWindowState.Normal;
+            _animationTimer.Enabled = presented && _refreshing;
+            _activityTimer.Enabled = presented && _usage != null;
             OpenCodeGoQuotaSnapshot go = _openCodeGoSource == null ? null : _openCodeGoSource.Quota;
-            _displayTimer.Enabled = Visible && _apiIsOpenCodeGo && go != null
+            _displayTimer.Enabled = presented && _apiIsOpenCodeGo && go != null
                 && go.Rolling.ResetsAt.HasValue && go.Rolling.ResetsAt.Value > DateTimeOffset.UtcNow;
         }
     }
