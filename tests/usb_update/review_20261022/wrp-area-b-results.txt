@@ -1,0 +1,4 @@
+Installer failure: Application page is write-protected by WRP1B
+Boot writes before pre-existing application protection was rejected: 1
+Application writes blocked by WRP1B: 1
+Old reset vector overwritten: True

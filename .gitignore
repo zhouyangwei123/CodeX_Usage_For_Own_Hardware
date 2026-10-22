@@ -20,3 +20,4 @@ firmware/**/Release/
 .superpowers/
 artifacts/
 review/
+**/__pycache__/

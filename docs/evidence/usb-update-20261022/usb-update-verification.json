@@ -1,0 +1,8 @@
+{
+  "boot_full_8192_unchanged": true,
+  "application_exact_match": true,
+  "bank2_unchanged": true,
+  "option_bytes_exact_unchanged": true,
+  "app_sha256": "e1ecebdc7f79c9795a8be8714e7f702deb9c8e9d85530afa0c49045ad0d4c2da",
+  "passed": true
+}

@@ -1,0 +1,39 @@
+{
+  "bootImageMatch": true,
+  "appImageMatch": true,
+  "bank2Preserved": true,
+  "changedBytesOnlyInErasedPages": true,
+  "optionChangesOnlyWRP1A": false,
+  "changedOptionOffsets": [
+    17,
+    19,
+    21,
+    23,
+    24,
+    26,
+    28,
+    30,
+    34,
+    38,
+    42,
+    46
+  ],
+  "wrp1a": "0xff83ff80",
+  "flashChangedBytes": 48029,
+  "meaningfulUnrelatedOptionFieldsPreserved": true,
+  "checkedUnrelatedOptionMasks": {
+    "0x0": "0xffffffff",
+    "0x8": "0x7fff",
+    "0x10": "0x80007fff",
+    "0x20": "0x7f007f",
+    "0x28": "0x100ff"
+  },
+  "optionFieldComparison": {
+    "0x0": true,
+    "0x8": true,
+    "0x10": true,
+    "0x20": true,
+    "0x28": true
+  },
+  "optionNote": "CubeProgrammer normalized reserved option bits; raw bytes outside WRP1A were not identical. Masks come from ST CMSIS stm32g474xx.h."
+}

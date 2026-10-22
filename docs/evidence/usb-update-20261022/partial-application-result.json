@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "usb_serial": "20553872524E",
+  "written_address": "0x08002000",
+  "written_bytes": 2048,
+  "application_bytes_match_expected": true,
+  "crc_stored": "0x16d81947",
+  "crc_actual": "0x6ba894fc",
+  "automatically_returned_to_dfu": true,
+  "boot_8192_unchanged": true,
+  "physical_cable_interruption": false,
+  "steps": 9
+}

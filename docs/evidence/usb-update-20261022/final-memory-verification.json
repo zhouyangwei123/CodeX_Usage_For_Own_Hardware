@@ -1,0 +1,10 @@
+{
+  "boot_full_8192_unchanged": true,
+  "delivered_application_exact_match": true,
+  "bank2_unchanged": true,
+  "option_bytes_exact_unchanged": true,
+  "app_sha256": "4d215913ece13d0cafbc0cf0af8f5f3f02ed8c2c8a38c2b63bf7cce36577c812",
+  "passed": true,
+  "full_bank1_equals_post_install_baseline": true,
+  "full_128k_flash_equals_post_install_baseline": true
+}

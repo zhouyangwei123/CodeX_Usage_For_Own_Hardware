@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-10-22T22:02:03.2794677+08:00",
+  "remainingTestProcesses": [],
+  "device": [
+    {
+      "Status": "OK",
+      "FriendlyName": "USB 串行设备 (COM8)",
+      "InstanceId": "USB\\VID_0483&PID_5740\\20553872524E"
+    }
+  ]
+}

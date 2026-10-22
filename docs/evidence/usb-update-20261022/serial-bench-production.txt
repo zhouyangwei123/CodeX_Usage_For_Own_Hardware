@@ -1,0 +1,108 @@
+Preflight identity
+Preflight exclusive open
+Preflight complete
+Initial Start
+STATUS 653 已连接 COM8
+Initial connection complete
+Cycle 1 Reconnect
+STATUS 669 设备已断开，自动重连中…
+STATUS 669 正在重新搜索设备…
+STATUS 837 已连接 COM8
+Cycle 1 passed
+Cycle 2 Pause/Start
+STATUS 963 设备已断开，自动重连中…
+STATUS 1712 已连接 COM8
+Cycle 2 passed
+Cycle 3 Reconnect
+STATUS 1839 设备已断开，自动重连中…
+STATUS 1839 正在重新搜索设备…
+STATUS 2008 已连接 COM8
+Cycle 3 passed
+Cycle 4 Pause/Start
+STATUS 2136 设备已断开，自动重连中…
+STATUS 2894 已连接 COM8
+Cycle 4 passed
+Cycle 5 Reconnect
+STATUS 3016 设备已断开，自动重连中…
+STATUS 3016 正在重新搜索设备…
+STATUS 3190 已连接 COM8
+Cycle 5 passed
+Cycle 6 Pause/Start
+STATUS 3316 设备已断开，自动重连中…
+STATUS 4074 已连接 COM8
+Cycle 6 passed
+Cycle 7 Reconnect
+STATUS 4197 设备已断开，自动重连中…
+STATUS 4197 正在重新搜索设备…
+STATUS 4369 已连接 COM8
+Cycle 7 passed
+Cycle 8 Pause/Start
+STATUS 4492 设备已断开，自动重连中…
+STATUS 5238 已连接 COM8
+Cycle 8 passed
+Cycle 9 Reconnect
+STATUS 5362 设备已断开，自动重连中…
+STATUS 5362 正在重新搜索设备…
+STATUS 5535 已连接 COM8
+Cycle 9 passed
+Cycle 10 Pause/Start
+STATUS 5657 设备已断开，自动重连中…
+STATUS 6412 已连接 COM8
+Cycle 10 passed
+Cycle 11 Reconnect
+STATUS 6536 设备已断开，自动重连中…
+STATUS 6536 正在重新搜索设备…
+STATUS 6719 已连接 COM8
+Cycle 11 passed
+Cycle 12 Pause/Start
+STATUS 6843 设备已断开，自动重连中…
+STATUS 7591 已连接 COM8
+Cycle 12 passed
+Cycle 13 Reconnect
+STATUS 7716 设备已断开，自动重连中…
+STATUS 7716 正在重新搜索设备…
+STATUS 7886 已连接 COM8
+Cycle 13 passed
+Cycle 14 Pause/Start
+STATUS 8011 设备已断开，自动重连中…
+STATUS 8768 已连接 COM8
+Cycle 14 passed
+Cycle 15 Reconnect
+STATUS 8892 设备已断开，自动重连中…
+STATUS 8892 正在重新搜索设备…
+STATUS 9064 已连接 COM8
+Cycle 15 passed
+Cycle 16 Pause/Start
+STATUS 9189 设备已断开，自动重连中…
+STATUS 9948 已连接 COM8
+Cycle 16 passed
+Cycle 17 Reconnect
+STATUS 10074 设备已断开，自动重连中…
+STATUS 10074 正在重新搜索设备…
+STATUS 10242 已连接 COM8
+Cycle 17 passed
+Cycle 18 Pause/Start
+STATUS 10366 设备已断开，自动重连中…
+STATUS 11119 已连接 COM8
+Cycle 18 passed
+Cycle 19 Reconnect
+STATUS 11241 设备已断开，自动重连中…
+STATUS 11241 正在重新搜索设备…
+STATUS 11415 已连接 COM8
+Cycle 19 passed
+Cycle 20 Pause/Start
+STATUS 11542 设备已断开，自动重连中…
+STATUS 12295 已连接 COM8
+Cycle 20 passed
+20 reconnect/pause cycles complete
+elapsed=30s echo=136/137 INFO=51 pending=1
+elapsed=60s echo=253/253 INFO=81 pending=0
+elapsed=90s echo=369/369 INFO=111 pending=0
+elapsed=120s echo=486/486 INFO=141 pending=0
+elapsed=150s echo=602/602 INFO=170 pending=0
+elapsed=180s echo=719/719 INFO=200 pending=0
+elapsed=210s echo=835/835 INFO=230 pending=0
+elapsed=240s echo=952/952 INFO=260 pending=0
+elapsed=270s echo=1068/1068 INFO=290 pending=0
+STATUS 312940 设备已断开，自动重连中…
+RESULT True; evidence=D:\Workspace\CodeX\Embedded_Works\CodeX_Usage\artifacts\review-20261022\serial-production-reconnect-and-soak.json

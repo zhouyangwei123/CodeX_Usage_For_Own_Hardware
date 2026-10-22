@@ -1,0 +1,3 @@
+Normal Close while update busy was blocked: True
+Tray-style Dispose while update busy disposed owner: True
+Tray-style Dispose while update busy disposed panel: True

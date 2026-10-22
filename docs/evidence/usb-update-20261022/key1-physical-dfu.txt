@@ -1,0 +1,16 @@
+      -------------------------------------------------------------------
+                       STM32CubeProgrammer v2.23.0                  
+      -------------------------------------------------------------------
+
+=====  DFU Interface   =====
+
+Total number of available STM32 device in DFU mode: 1
+
+  Device Index           : USB1
+  USB Bus Number         : 001
+  USB Address Number     : 003
+  Product ID             : DFU in FS Mode
+  Serial number          : 20553872524E
+  Firmware version       : 0x011a
+  Device ID              : 0x0469
+

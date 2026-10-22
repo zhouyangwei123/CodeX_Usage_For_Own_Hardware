@@ -1,0 +1,163 @@
+{
+  "Id": 19728,
+  "Path": "D:\\Workspace\\CodeX\\Embedded_Works\\CodeX_Usage\\artifacts\\review-20261022\\hardware\\SerialLinkBench.exe",
+  "StartTime": "2026-10-22T21:52:04.6191197+08:00",
+  "CPU": 0.0625,
+  "Responding": true,
+  "Threads": [
+    {
+      "Id": 3284,
+      "ThreadState": 5,
+      "WaitReason": 6,
+      "TotalProcessorTime": {
+        "Ticks": 625000,
+        "Days": 0,
+        "Hours": 0,
+        "Milliseconds": 62,
+        "Microseconds": 500,
+        "Nanoseconds": 0,
+        "Minutes": 0,
+        "Seconds": 0,
+        "TotalDays": 7.233796296296296E-07,
+        "TotalHours": 1.736111111111111E-05,
+        "TotalMilliseconds": 62.5,
+        "TotalMicroseconds": 62500.0,
+        "TotalNanoseconds": 62500000.0,
+        "TotalMinutes": 0.0010416666666666667,
+        "TotalSeconds": 0.0625
+      }
+    },
+    {
+      "Id": 21076,
+      "ThreadState": 5,
+      "WaitReason": 6,
+      "TotalProcessorTime": {
+        "Ticks": 0,
+        "Days": 0,
+        "Hours": 0,
+        "Milliseconds": 0,
+        "Microseconds": 0,
+        "Nanoseconds": 0,
+        "Minutes": 0,
+        "Seconds": 0,
+        "TotalDays": 0.0,
+        "TotalHours": 0.0,
+        "TotalMilliseconds": 0.0,
+        "TotalMicroseconds": 0.0,
+        "TotalNanoseconds": 0.0,
+        "TotalMinutes": 0.0,
+        "TotalSeconds": 0.0
+      }
+    },
+    {
+      "Id": 15404,
+      "ThreadState": 5,
+      "WaitReason": 6,
+      "TotalProcessorTime": {
+        "Ticks": 0,
+        "Days": 0,
+        "Hours": 0,
+        "Milliseconds": 0,
+        "Microseconds": 0,
+        "Nanoseconds": 0,
+        "Minutes": 0,
+        "Seconds": 0,
+        "TotalDays": 0.0,
+        "TotalHours": 0.0,
+        "TotalMilliseconds": 0.0,
+        "TotalMicroseconds": 0.0,
+        "TotalNanoseconds": 0.0,
+        "TotalMinutes": 0.0,
+        "TotalSeconds": 0.0
+      }
+    },
+    {
+      "Id": 23324,
+      "ThreadState": 5,
+      "WaitReason": 6,
+      "TotalProcessorTime": {
+        "Ticks": 0,
+        "Days": 0,
+        "Hours": 0,
+        "Milliseconds": 0,
+        "Microseconds": 0,
+        "Nanoseconds": 0,
+        "Minutes": 0,
+        "Seconds": 0,
+        "TotalDays": 0.0,
+        "TotalHours": 0.0,
+        "TotalMilliseconds": 0.0,
+        "TotalMicroseconds": 0.0,
+        "TotalNanoseconds": 0.0,
+        "TotalMinutes": 0.0,
+        "TotalSeconds": 0.0
+      }
+    },
+    {
+      "Id": 9356,
+      "ThreadState": 5,
+      "WaitReason": 8,
+      "TotalProcessorTime": {
+        "Ticks": 0,
+        "Days": 0,
+        "Hours": 0,
+        "Milliseconds": 0,
+        "Microseconds": 0,
+        "Nanoseconds": 0,
+        "Minutes": 0,
+        "Seconds": 0,
+        "TotalDays": 0.0,
+        "TotalHours": 0.0,
+        "TotalMilliseconds": 0.0,
+        "TotalMicroseconds": 0.0,
+        "TotalNanoseconds": 0.0,
+        "TotalMinutes": 0.0,
+        "TotalSeconds": 0.0
+      }
+    },
+    {
+      "Id": 18292,
+      "ThreadState": 5,
+      "WaitReason": 8,
+      "TotalProcessorTime": {
+        "Ticks": 0,
+        "Days": 0,
+        "Hours": 0,
+        "Milliseconds": 0,
+        "Microseconds": 0,
+        "Nanoseconds": 0,
+        "Minutes": 0,
+        "Seconds": 0,
+        "TotalDays": 0.0,
+        "TotalHours": 0.0,
+        "TotalMilliseconds": 0.0,
+        "TotalMicroseconds": 0.0,
+        "TotalNanoseconds": 0.0,
+        "TotalMinutes": 0.0,
+        "TotalSeconds": 0.0
+      }
+    },
+    {
+      "Id": 6208,
+      "ThreadState": 5,
+      "WaitReason": 6,
+      "TotalProcessorTime": {
+        "Ticks": 0,
+        "Days": 0,
+        "Hours": 0,
+        "Milliseconds": 0,
+        "Microseconds": 0,
+        "Nanoseconds": 0,
+        "Minutes": 0,
+        "Seconds": 0,
+        "TotalDays": 0.0,
+        "TotalHours": 0.0,
+        "TotalMilliseconds": 0.0,
+        "TotalMicroseconds": 0.0,
+        "TotalNanoseconds": 0.0,
+        "TotalMinutes": 0.0,
+        "TotalSeconds": 0.0
+      }
+    }
+  ]
+}

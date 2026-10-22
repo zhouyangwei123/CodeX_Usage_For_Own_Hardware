@@ -5,3 +5,9 @@ firmware/** -text
 *.bin binary
 *.hex -text
 *.zip binary
+# Keep captured test output and executed source snapshots byte-for-byte.
+# Raw CLI/PowerShell evidence intentionally retains its original whitespace.
+docs/evidence/usb-update-20261022/** -text -whitespace
+tests/usb_update/bench_20261022/*.cs -text whitespace=cr-at-eol
+tests/usb_update/bench_20261022/*.py -text whitespace=cr-at-eol
+tests/usb_update/review_20261022/*-results.txt -text -whitespace

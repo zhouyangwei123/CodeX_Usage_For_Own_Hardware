@@ -1,0 +1,5 @@
+Requested CDC board A transition: True
+DFU listing contains only board B: BBBB2222
+Writes to board B: 1
+All device operations pinned to board B: True
+Updater returned successful completion: True
