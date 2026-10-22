@@ -28,6 +28,7 @@
 #define MSG_BTN_INJECT   0x09   /* [0]=按键索引 [1]=事件类型（闭环测试用） */
 #define MSG_RGB_STATUS   0x0A   /* 6 种状态颜色 x 3 字节 RGB（空闲/运行/等待/错误/完成/离线） */
 #define MSG_PC_METRICS   0x0B   /* v3: schema/flags/CPU%/内存%/温度x10/内存MB/上下行KiB/s，共28字节 */
+#define MSG_ENTER_DFU    0x0C   /* exact 8-byte token NMTDFU01, then clean reset */
 
 /* 设备 -> 主机 */
 #define MSG_INFO         0x81

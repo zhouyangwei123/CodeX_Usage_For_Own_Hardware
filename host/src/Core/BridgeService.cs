@@ -112,6 +112,20 @@ namespace CodexToolsHost.Core
 
         public bool IsDeviceConnected { get { return _link.IsConnected; } }
         public string DevicePort { get { return _link.PortName; } }
+        public bool SupportsUsbUpdate { get { return _firmwareMajor > 0 || _firmwareMinor >= 9; } }
+
+        public void EnterFirmwareUpdate()
+        {
+            if (!_link.IsConnected || !SupportsUsbUpdate)
+                throw new InvalidOperationException("设备尚未安装USB升级入口，请先用ST-Link安装首次完整镜像。");
+            if (!_link.Send(FrameCodec.MsgEnterDfu, Encoding.ASCII.GetBytes("NMTDFU01")))
+                throw new InvalidOperationException("设备未接受进入升级模式的请求。");
+            Thread.Sleep(300); /* firmware resets after 200 ms */
+            _link.Pause();
+        }
+
+        public void PauseDeviceForUpdate() { _link.Pause(); }
+        public void ResumeDeviceAfterUpdate() { _link.Start(); }
         public ICodexStatusSource Codex { get { return _codex; } }
         public IDeepSeekSource DeepSeek { get { return _deepseek; } }
         public IOpenCodeGoQuotaSource OpenCodeGo { get { return _openCodeGo; } }
@@ -185,6 +199,7 @@ namespace CodexToolsHost.Core
 
         private void OnDeviceDisconnected()
         {
+            _firmwareMajor = _firmwareMinor = 0;
             RaiseStatus(BuildSummaryText());
             var balloon = Balloon;
             if (balloon != null) balloon("设备已断开，正在自动重连…");

@@ -1,8 +1,10 @@
 # CodeX Usage
 
-Windows 上位机与 STM32G474 桌面工具的联合仓库。本修复分支：上位机 **0.4.3**、固件 **0.8**，待实机验收。
+Windows 上位机与 STM32G474 桌面工具的联合仓库。本修复分支：上位机 **0.5.0**、应用固件 **0.9**、启动程序 **1.0**，已完成离线测试，待实机验收。
 
-串口稳定性修复的 [下载与烧录说明](deliverables/usb-stability/README.md) 和 [验证记录](docs/USB_STABILITY-20261022.md)。当前正式发布仍为 0.4.2；以下历史说明中的固件冻结和校验边界对应原版。
+当前请使用 [USB 升级与按键恢复安装包](deliverables/usb-update/README.md) 和 [验证记录](docs/USB_UPDATE-20261022.md)。首次通过 ST-Link 安装并保护启动区，此后通过 USB 更新应用；按住 KEY1 上电可进入恢复模式。固件 0.9 已包含前一版串口稳定性修复。
+
+上一阶段的 [串口稳定性验证](docs/USB_STABILITY-20261022.md) 保留作问题定位依据。当前正式发布仍为 0.4.2；以下历史说明中的固件冻结和校验边界对应原版。
 
 远端：https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware
 
@@ -25,7 +27,7 @@ Windows 便携发布包见 [0.4.2 Release](https://github.com/zhouyangwei123/Cod
 ## 数据与验证边界
 
 个人配置保留在本机，不纳入 Git。历史说明位于 `docs/HISTORICAL_README.md`，其中早期路径或硬件信息可能已过时。
-当前不修改或烧录固件；设备不在手边时仅验证上位机与模拟通讯。
+本分支按用户要求修改固件并提供离线验证后的安装包；本次未对真实设备烧录，也未完成真实 USB 升级、恢复及长期稳定性验收。
 
 本地 `baseline` 分支保存导入时的工程，后续更改在功能分支进行。导入提交由 Codex 工具署名，不修改用户全局 Git 身份。
 

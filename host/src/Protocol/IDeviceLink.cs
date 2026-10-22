@@ -14,6 +14,7 @@ namespace CodexToolsHost.Protocol
         string PortName { get; }
 
         void Start();
+        void Pause();
         void ConfigurePort(string portName);
         void Reconnect();
         bool Send(byte type, byte[] payload);

@@ -2,3 +2,6 @@
 firmware/** -text
 *.dll binary
 *.ico binary
+*.bin binary
+*.hex -text
+*.zip binary

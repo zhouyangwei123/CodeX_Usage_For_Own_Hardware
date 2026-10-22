@@ -69,6 +69,12 @@ namespace CodexToolsHost.Protocol
             /* 模拟设备始终在线 */
         }
 
+        public void Pause()
+        {
+            _started = false;
+            if (_timer != null) { _timer.Dispose(); _timer = null; }
+        }
+
         public bool Send(byte type, byte[] payload)
         {
             if (payload == null) payload = new byte[0];

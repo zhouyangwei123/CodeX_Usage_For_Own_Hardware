@@ -430,6 +430,9 @@ namespace CodexToolsHost.UI
             _diagnosticsSections = new TabControl { Dock = DockStyle.Fill };
             _diagnosticsSections.TabPages.Add(BuildMonitorTab());
             _diagnosticsSections.TabPages.Add(BuildAboutTab());
+            var firmwarePage = new TabPage("设备固件升级");
+            firmwarePage.Controls.Add(new FirmwareUpdatePanel(_bridge, this));
+            _diagnosticsSections.TabPages.Add(firmwarePage);
             if (_updates != null)
             {
                 var updatesPage = new TabPage("软件更新");

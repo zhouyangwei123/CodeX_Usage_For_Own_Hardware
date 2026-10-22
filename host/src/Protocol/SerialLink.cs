@@ -18,6 +18,7 @@ namespace CodexToolsHost.Protocol
         private Timer _scanTimer;
         private Timer _pingTimer;
         private volatile bool _disposed;
+        private volatile bool _paused;
         private int _scanInProgress;
         private int _scanGeneration;
         private int _connectionEpoch;
@@ -68,10 +69,26 @@ namespace CodexToolsHost.Protocol
 
         public void Start()
         {
-            if (_scanTimer != null) return;
+            if (_disposed) return;
+            _paused = false;
+            if (_scanTimer != null)
+            {
+                _scanTimer.Change(500, 2000);
+                _pingTimer.Change(HeartbeatPeriodMs, HeartbeatPeriodMs);
+                return;
+            }
             _scanTimer = new Timer(delegate { ScanForDevice(); }, null, 500, 2000);
             _pingTimer = new Timer(delegate { PingOnce(); }, null,
                 HeartbeatPeriodMs, HeartbeatPeriodMs);
+        }
+
+        public void Pause()
+        {
+            _paused = true;
+            Interlocked.Increment(ref _scanGeneration);
+            if (_scanTimer != null) _scanTimer.Change(Timeout.Infinite, Timeout.Infinite);
+            if (_pingTimer != null) _pingTimer.Change(Timeout.Infinite, Timeout.Infinite);
+            HandleDisconnect(null, true);
         }
 
         /* 断开当前连接并立即触发一次扫描（自动重连仍由定时器兜底） */
@@ -94,7 +111,7 @@ namespace CodexToolsHost.Protocol
             SerialPort failedPort = null;
             lock (_sync)
             {
-                if (_port == null || !_verified || !IsPortOpen(_port)) return false;
+                if (_paused || _port == null || !_verified || !IsPortOpen(_port)) return false;
                 try
                 {
                     _port.Write(frame, 0, frame.Length);
@@ -200,7 +217,7 @@ namespace CodexToolsHost.Protocol
 
                 lock (_sync)
                 {
-                    if (_disposed
+                    if (_disposed || _paused
                         || Interlocked.CompareExchange(ref _scanGeneration, 0, 0) != generation
                         || _port != null)
                         throw new OperationCanceledException();
@@ -349,7 +366,7 @@ namespace CodexToolsHost.Protocol
 
         private void PingOnce()
         {
-            if (_disposed) return;
+            if (_disposed || _paused) return;
             try
             {
                 byte[] token = BitConverter.GetBytes((uint)Environment.TickCount);
@@ -452,13 +469,13 @@ namespace CodexToolsHost.Protocol
 
         private bool IsScanCurrent(int generation)
         {
-            return !_disposed
+            return !_disposed && !_paused
                 && Interlocked.CompareExchange(ref _scanGeneration, 0, 0) == generation;
         }
 
         private bool IsScanCurrentLocked(int generation)
         {
-            return !_disposed
+            return !_disposed && !_paused
                 && Interlocked.CompareExchange(ref _scanGeneration, 0, 0) == generation;
         }
 
@@ -522,7 +539,7 @@ namespace CodexToolsHost.Protocol
 
         private void RequestScan(int dueTimeMs)
         {
-            if (_disposed) return;
+            if (_disposed || _paused) return;
             try
             {
                 Timer timer = _scanTimer;

@@ -59,6 +59,9 @@ defined in linker script */
 	.weak	Reset_Handler
 	.type	Reset_Handler, %function
 Reset_Handler:
+  .ifdef NMT_BOOT_STAGE
+  cpsid i
+  .endif
   ldr   r0, =_estack
   mov   sp, r0          /* set stack pointer */
 
@@ -97,7 +100,9 @@ LoopFillZerobss:
   bcc FillZerobss
 
 /* Call static constructors */
+  .ifndef NMT_BOOT_STAGE
     bl __libc_init_array
+  .endif
 /* Call the application's entry point.*/
 	bl	main
 

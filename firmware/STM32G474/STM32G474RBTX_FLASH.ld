@@ -44,8 +44,8 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 /* Memories definition */
 MEMORY
 {
-  RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 128K
-  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 128K
+  RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 128K - 8
+  FLASH    (rx)    : ORIGIN = 0x08002000,  LENGTH = 56K
 }
 
 /* Sections */
@@ -60,7 +60,14 @@ SECTIONS
   } >FLASH
 
   /* The program code and other data into "FLASH" Rom type memory */
-  .text :
+  .image_header ORIGIN(FLASH) + 0x200 :
+  {
+    KEEP(*(.image_header))
+  } >FLASH
+  ASSERT(SIZEOF(.isr_vector) <= 0x200, "Vector table overlaps image header")
+  ASSERT(SIZEOF(.image_header) == 32, "Missing firmware image header")
+
+  .text ORIGIN(FLASH) + 0x400 :
   {
     . = ALIGN(4);
     *(.text)           /* .text sections (code) */

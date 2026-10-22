@@ -14,6 +14,7 @@
 #include "encoder.h"
 #include "pc_metrics_parser.h"
 #include "protocol.h"
+#include "firmware_update.h"
 #include "ui_header.h"
 #include "usb_device.h"
 #include "usbd_core.h"
@@ -327,6 +328,9 @@ void app_on_message(uint8_t type, const uint8_t *payload, uint8_t len)
       break;
     case MSG_PING:
       if (len >= 4) protocol_send(MSG_PONG, payload, 4);
+      break;
+    case MSG_ENTER_DFU:
+      firmware_update_request(payload, len);
       break;
     case MSG_OLED_CFG:
       if (len >= 2) oled_set_config(payload[0], payload[1]);
@@ -1066,6 +1070,7 @@ void app_tick(void)
   /* 通信 */
   protocol_process();
   protocol_tx_poll();
+  firmware_update_poll();
 
   /* 周期性加固 SOF 中断使能位（防止 USB 复位/枚举期间被清除） */
   USB->CNTR |= USB_CNTR_SOFM;
