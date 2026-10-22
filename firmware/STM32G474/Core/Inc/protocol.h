@@ -41,9 +41,9 @@ void protocol_rx_byte(uint8_t b);
 void protocol_process(void);
 uint8_t protocol_send(uint8_t type, const uint8_t *payload, uint8_t len);
 void protocol_tx_poll(void);
-void protocol_tx_complete(void);
 
-/* 底层发送钩子：由 USB CDC 层实现（usbd_cdc_if.c），返回 0=已发送，非 0=忙 */
+/* CDC must copy accepted data before returning; caller retains failed frames.
+   Returns 0=accepted, nonzero=busy/unavailable. */
 uint8_t protocol_cdc_transmit(uint8_t *buf, uint16_t len);
 
 #endif /* __PROTOCOL_H */

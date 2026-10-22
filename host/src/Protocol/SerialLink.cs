@@ -155,7 +155,8 @@ namespace CodexToolsHost.Protocol
                 return;
             }
 
-            foreach (string port in SerialPortSelection.OrderCandidates(ports, lastVerified))
+            foreach (string port in SerialPortSelection.OrderCandidates(ports, lastVerified,
+                SerialPortSelection.GetBluetoothPorts()))
             {
                 if (!IsScanCurrent(generation) || IsConnected) return;
                 if (IsCurrentPortName(port)) continue;
@@ -181,6 +182,7 @@ namespace CodexToolsHost.Protocol
         {
             SerialPort candidate = null;
             bool opened = false;
+            string stage = "打开串口";
             try
             {
                 ThrowIfScanStale(generation);
@@ -193,6 +195,7 @@ namespace CodexToolsHost.Protocol
                 };
                 candidate.Open();
                 opened = true;
+                stage = "协议握手";
                 candidate.DataReceived += OnDataReceived;
 
                 lock (_sync)
@@ -257,7 +260,7 @@ namespace CodexToolsHost.Protocol
                 CleanupCandidate(candidate);
                 return false;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 bool candidateOpen = false;
                 candidateOpen = IsPortOpen(candidate);
@@ -272,6 +275,7 @@ namespace CodexToolsHost.Protocol
                     lock (_failedPorts) { _failedPorts[port] = DateTime.UtcNow.AddSeconds(2); }
                 }
                 CleanupCandidate(candidate);
+                RaiseStatus(port + " " + stage + "失败: " + ex.Message);
                 return false;
             }
         }

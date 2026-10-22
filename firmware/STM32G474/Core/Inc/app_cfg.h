@@ -62,7 +62,7 @@
 #define OLED_AUTO_INTERVAL_MS  5000u
 #define HOST_LINK_TIMEOUT_MS  5000  /* 超过该时间未收到主机 STATUS 视为离线 */
 #define FW_VERSION_MAJOR      0
-#define FW_VERSION_MINOR      7
+#define FW_VERSION_MINOR      8
 #define FW_MODEL_STRING       "CodeX Tools"
 
 #endif /* __APP_CFG_H */

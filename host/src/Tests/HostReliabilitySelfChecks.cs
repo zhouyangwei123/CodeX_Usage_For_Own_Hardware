@@ -28,6 +28,16 @@ namespace CodexToolsHost.Tests
 
             result["serialHeartbeatPolicyOk"] = firstPing && wrongPongRejected
                 && firstMissTolerated && secondMissDisconnects && resetRestores;
+            string[] autoPorts = SerialPortSelection.OrderCandidates(
+                new[] { "COM4", "COM5", "COM6", "COM10", "com6" }, "COM6",
+                new[] { "com4", "COM5" });
+            string manualPort;
+            result["serialAutoSkipsBluetoothOk"] = autoPorts.Length == 2
+                && autoPorts[0] == "COM6" && autoPorts[1] == "COM10"
+                && SerialPortSelection.OrderCandidates(new[] { "COM4" },
+                    "COM4", new[] { "COM4" }).Length == 0
+                && SerialPortSelection.TryFindPort(new[] { "COM4", "COM6" },
+                    "COM4", out manualPort) && manualPort == "COM4";
             result["sqliteTransientBindingOk"] =
                 DesktopLogStatusMonitor.SqliteTransient == new IntPtr(-1);
             result["pcMonitorSerializationOk"] = CheckPcMonitorSerialization();

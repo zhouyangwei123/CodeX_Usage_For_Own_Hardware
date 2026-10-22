@@ -23,6 +23,7 @@
 
 /* USER CODE BEGIN INCLUDE */
 #include "protocol.h"
+#include <string.h>
 
 /* USER CODE END INCLUDE */
 
@@ -126,7 +127,6 @@ static int8_t CDC_Init_FS(void);
 static int8_t CDC_DeInit_FS(void);
 static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length);
 static int8_t CDC_Receive_FS(uint8_t* pbuf, uint32_t *Len);
-static int8_t CDC_TransmitCplt_FS(uint8_t *pbuf, uint32_t *Len, uint8_t epnum);
 
 /* USER CODE BEGIN PRIVATE_FUNCTIONS_DECLARATION */
 
@@ -142,7 +142,7 @@ USBD_CDC_ItfTypeDef USBD_Interface_fops_FS =
   CDC_DeInit_FS,
   CDC_Control_FS,
   CDC_Receive_FS,
-  CDC_TransmitCplt_FS
+  NULL
 };
 
 /* Private functions ---------------------------------------------------------*/
@@ -285,39 +285,22 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
   */
 uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
 {
-  uint8_t result = USBD_OK;
+  uint8_t result = USBD_BUSY;
   /* USER CODE BEGIN 7 */
+  /* Protect class lifetime and the in-flight buffer from USB reset/completion
+     interrupts. Preserve the caller's interrupt mask; never wait here. */
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
   USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
-  if (hcdc->TxState != 0){
-    return USBD_BUSY;
+  if (hUsbDeviceFS.dev_state == USBD_STATE_CONFIGURED && hcdc != NULL
+      && hcdc->TxState == 0U && Buf != NULL && Len <= APP_TX_DATA_SIZE)
+  {
+    memcpy(UserTxBufferFS, Buf, Len);
+    USBD_CDC_SetTxBuffer(&hUsbDeviceFS, UserTxBufferFS, Len);
+    result = USBD_CDC_TransmitPacket(&hUsbDeviceFS);
   }
-  USBD_CDC_SetTxBuffer(&hUsbDeviceFS, Buf, Len);
-  result = USBD_CDC_TransmitPacket(&hUsbDeviceFS);
+  __set_PRIMASK(primask);
   /* USER CODE END 7 */
-  return result;
-}
-
-/**
-  * @brief  CDC_TransmitCplt_FS
-  *         Data transmitted callback
-  *
-  *         @note
-  *         This function is IN transfer complete callback used to inform user that
-  *         the submitted Data is successfully sent over USB.
-  *
-  * @param  Buf: Buffer of data to be received
-  * @param  Len: Number of data received (in bytes)
-  * @retval Result of the operation: USBD_OK if all operations are OK else USBD_FAIL
-  */
-static int8_t CDC_TransmitCplt_FS(uint8_t *Buf, uint32_t *Len, uint8_t epnum)
-{
-  uint8_t result = USBD_OK;
-  /* USER CODE BEGIN 13 */
-  UNUSED(Buf);
-  UNUSED(Len);
-  UNUSED(epnum);
-  protocol_tx_complete();
-  /* USER CODE END 13 */
   return result;
 }
 

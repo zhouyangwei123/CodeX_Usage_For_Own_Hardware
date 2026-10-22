@@ -1,7 +1,7 @@
 /**
   ******************************************************************************
   * @file    protocol.c
-  * @brief   帧解析/组帧，RX 环形缓冲 + TX 单槽挂起队列
+  * @brief   帧解析/组帧，RX 环形缓冲 + TX 队列
   ******************************************************************************
   */
 
@@ -27,12 +27,9 @@ static uint8_t pbuf[PROTO_MAX_PAYLOAD];
 #define TX_FRAME_MAX (PROTO_MAX_PAYLOAD + 6)
 static uint8_t tx_ring[TX_SLOTS][TX_FRAME_MAX];
 static uint8_t tx_ring_len[TX_SLOTS];
-static uint8_t tx_active[TX_FRAME_MAX]; /* 在途帧，避免环形槽被覆盖 */
-static uint8_t tx_active_len;
 static volatile uint8_t tx_head;   /* 下一个写入位置 */
 static volatile uint8_t tx_tail;   /* 下一个发送位置 */
 static volatile uint8_t tx_count;
-static volatile uint8_t tx_busy;
 
 static uint8_t crc8_update(uint8_t crc, uint8_t data)
 {
@@ -50,8 +47,6 @@ void protocol_init(void)
   tx_head = 0;
   tx_tail = 0;
   tx_count = 0;
-  tx_busy = 0;
-  tx_active_len = 0;
 }
 
 void protocol_rx_byte(uint8_t b)
@@ -79,6 +74,11 @@ static void feed_parser(uint8_t b)
       break;
     case S_LEN:
       plen = b;
+      if (plen > PROTO_MAX_PAYLOAD)
+      {
+        pstate = S_H1;
+        break;
+      }
       pidx = 0;
       pcrc = crc8_update(0, ptype);
       pcrc = crc8_update(pcrc, plen);
@@ -148,19 +148,13 @@ uint8_t protocol_send(uint8_t type, const uint8_t *payload, uint8_t len)
 
 void protocol_tx_poll(void)
 {
-  if (tx_count == 0 || tx_busy) return;
+  if (tx_count == 0) return;
   uint8_t len = tx_ring_len[tx_tail];
-  for (uint8_t i = 0; i < len; i++) tx_active[i] = tx_ring[tx_tail][i];
-  tx_active_len = len;
-  tx_tail = (uint8_t)((tx_tail + 1) % TX_SLOTS);
-  tx_count--;
-  if (protocol_cdc_transmit(tx_active, tx_active_len) == 0)
+  /* CDC copies accepted data into its own in-flight buffer. Keep the queued
+     frame on busy/failure; the USB driver alone owns transfer completion. */
+  if (protocol_cdc_transmit(tx_ring[tx_tail], len) == 0)
   {
-    tx_busy = 1;
+    tx_tail = (uint8_t)((tx_tail + 1) % TX_SLOTS);
+    tx_count--;
   }
-}
-
-void protocol_tx_complete(void)
-{
-  tx_busy = 0;
 }

@@ -1,6 +1,8 @@
 # CodeX Usage
 
-Windows 上位机与 STM32G474 桌面工具的联合仓库。上位机当前版本：0.4.2。
+Windows 上位机与 STM32G474 桌面工具的联合仓库。本修复分支：上位机 **0.4.3**、固件 **0.8**，待实机验收。
+
+串口稳定性修复的 [下载与烧录说明](deliverables/usb-stability/README.md) 和 [验证记录](docs/USB_STABILITY-20261022.md)。当前正式发布仍为 0.4.2；以下历史说明中的固件冻结和校验边界对应原版。
 
 远端：https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware
 

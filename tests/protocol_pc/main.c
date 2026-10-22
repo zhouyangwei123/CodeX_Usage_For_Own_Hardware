@@ -148,7 +148,7 @@ int main(void)
   protocol_init();
   tx_len = 0;
   msg_count = 0;
-  uint8_t burst[900];
+  uint8_t burst[900] = {0};
   for (int i = 0; i < 100; i++)
   {
     int o = i * 9;
@@ -179,7 +179,6 @@ int main(void)
     if (tx_len > before)
     {
       sent++;
-      protocol_tx_complete();
     }
     if (tx_len >= 8 * 6) break;
   }

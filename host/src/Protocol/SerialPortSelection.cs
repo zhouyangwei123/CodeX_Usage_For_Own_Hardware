@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Microsoft.Win32;
 
 namespace CodexToolsHost.Protocol
 {
@@ -49,15 +50,19 @@ namespace CodexToolsHost.Protocol
         }
 
         public static string[] OrderCandidates(string[] availablePorts,
-            string lastVerifiedPort)
+            string lastVerifiedPort, string[] excludedPorts = null)
         {
+            var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (excludedPorts != null)
+                foreach (string port in excludedPorts) excluded.Add(Normalize(port));
             var unique = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             if (availablePorts != null)
             {
                 foreach (string port in availablePorts)
                 {
                     string normalized = Normalize(port);
-                    if (IsAuto(normalized) || unique.ContainsKey(normalized)) continue;
+                    if (IsAuto(normalized) || excluded.Contains(normalized)
+                        || unique.ContainsKey(normalized)) continue;
                     unique[normalized] = normalized;
                 }
             }
@@ -80,6 +85,24 @@ namespace CodexToolsHost.Protocol
                 }
             }
             return ordered.ToArray();
+        }
+
+        public static string[] GetBluetoothPorts()
+        {
+            var ports = new List<string>();
+            using (RegistryKey key = Registry.LocalMachine.OpenSubKey(
+                @"HARDWARE\DEVICEMAP\SERIALCOMM"))
+            {
+                if (key == null) return ports.ToArray();
+                foreach (string device in key.GetValueNames())
+                    if (device.StartsWith(@"\Device\BthModem",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        string port = key.GetValue(device) as string;
+                        if (!string.IsNullOrEmpty(port)) ports.Add(Normalize(port));
+                    }
+            }
+            return ports.ToArray();
         }
 
         private static int ComparePorts(string left, string right)
