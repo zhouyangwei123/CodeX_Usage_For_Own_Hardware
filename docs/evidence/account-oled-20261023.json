@@ -1,0 +1,38 @@
+{
+  "host_version": "0.6.0",
+  "candidate_application_version": "0.10",
+  "boot_version": "1.0",
+  "host_sha256": "3c9e0c0c857f93c0b57a96b1e1f360ab7e5e20232787b3019b083d19a54a832d",
+  "application_sha256": "d3cfb4157a31aa0ac188421847e4b3be1207af5b9032791822b7fba417f78a7e",
+  "installed_host_matches_candidate": true,
+  "default_usage_scope": "account",
+  "installed_existing_skin_preserved": true,
+  "integration_checks": 173,
+  "native_host_firmware_pixel_comparisons": 26,
+  "demo_raster_states": 216,
+  "usage_tests": 26,
+  "token_hud_checks": 77,
+  "hud_activation_checks": 77,
+  "hud_lifecycle_checks": 87,
+  "selfcheck_booleans": {
+    "ui_batch": 15,
+    "mock": 4,
+    "core": 86,
+    "phase_two": 10
+  },
+  "firmware_build_errors": 0,
+  "firmware_build_warnings": 0,
+  "application_bytes": 47408,
+  "application_capacity": 57344,
+  "boot_unchanged": true,
+  "live_account_read": {
+    "latest_service_date": "2026-10-22",
+    "daily_buckets": 180,
+    "passed": true,
+    "private_counts_recorded": false
+  },
+  "new_firmware_hardware_tested": false,
+  "new_firmware_flashed": false,
+  "github_pushed": false,
+  "next_step": "Wait for user USB upgrade notice, then hardware validation and GitHub push"
+}

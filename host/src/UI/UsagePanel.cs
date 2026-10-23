@@ -7,12 +7,21 @@ using System.Linq;
 using System.Text;
 using System.Windows.Forms;
 using CodexToolsHost.Usage;
+using CodexToolsHost.Core;
+using CodexToolsHost.Model;
+using CodexToolsHost.Quota;
 
 namespace CodexToolsHost.UI
 {
     public sealed class UsagePanel : UserControl
     {
         private readonly LocalUsageService service;
+        private readonly BridgeService bridge;
+        private readonly AppConfig config;
+        private readonly Label heading = new Label();
+        private readonly Label description = new Label();
+        private Button importButton;
+        private List<AccountUsageDay> visibleAccountDays = new List<AccountUsageDay>();
         private readonly ComboBox source = new ComboBox();
         private readonly ComboBox period = new ComboBox();
         private readonly Label summary = new Label();
@@ -29,10 +38,13 @@ namespace CodexToolsHost.UI
         private readonly Font summaryFont = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold);
         private readonly Font bodyFont = new Font("Microsoft YaHei UI", 9f);
 
-        public UsagePanel(LocalUsageService service)
+        public UsagePanel(LocalUsageService service) : this(service, null, AppConfig.CreateDefault()) { }
+        public UsagePanel(LocalUsageService service, BridgeService bridge, AppConfig config)
         {
             if (service == null) throw new ArgumentNullException("service");
+            if (config == null) throw new ArgumentNullException("config");
             this.service = service;
+            this.bridge = bridge; this.config = config;
             Name = "usagePanel";
             Dock = DockStyle.Fill;
             BackColor = Color.FromArgb(246, 248, 251);
@@ -45,16 +57,18 @@ namespace CodexToolsHost.UI
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
             layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
-            layout.Controls.Add(new Label { Text = "本机 Token 用量", Font = titleFont, Dock = DockStyle.Fill, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft }, 0, 0);
-            layout.Controls.Add(new Label { Text = "每 5 秒增量刷新 · 每分钟发现新会话 · 缓存属于输入，推理属于输出。", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
-                ForeColor = Color.FromArgb(98, 113, 132) }, 0, 1);
+            heading.Font = titleFont; heading.Dock = DockStyle.Fill; heading.TextAlign = ContentAlignment.MiddleLeft;
+            description.Dock = DockStyle.Fill; description.TextAlign = ContentAlignment.MiddleLeft; description.ForeColor = Color.FromArgb(98, 113, 132);
+            layout.Controls.Add(heading, 0, 0); layout.Controls.Add(description, 0, 1);
             FlowLayoutPanel toolbar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = true, Margin = Padding.Empty };
             source.Name = "usageSource"; source.DropDownStyle = ComboBoxStyle.DropDownList; source.Width = 150;
-            source.Items.Add("本机 Codex 日志"); source.SelectedIndex = 0;
+            source.Items.AddRange(new object[] { "整个账号 · 服务端", "本机 Codex 日志" });
+            source.SelectedIndex = AppConfig.NormalizeUsageScope(config.UsageDisplayScope) == "local" ? 1 : 0;
             period.Name = "usagePeriod"; period.DropDownStyle = ComboBoxStyle.DropDownList; period.Width = 100;
             period.Items.AddRange(new object[] { "今天", "近 7 天", "本月", "全部会话" }); period.SelectedIndex = 1;
             refresh = Button("刷新", "usageRefresh", 66);
             Button import = Button("导入 JSON", "usageImport", 93);
+            importButton = import;
             Button export = Button("导出 CSV", "usageExport", 90);
             Button help = Button("导入帮助", "usageHelp", 90);
             toolbar.Controls.AddRange(new Control[] { source, period, refresh, import, export, help });
@@ -75,12 +89,28 @@ namespace CodexToolsHost.UI
             coverage.BackColor = Color.FromArgb(237, 243, 250); coverage.ForeColor = Color.FromArgb(75, 93, 117);
             coverage.AutoEllipsis = true; layout.Controls.Add(coverage, 0, 6);
             Controls.Add(layout);
-            source.SelectedIndexChanged += delegate { RenderReport(); };
+            source.SelectedIndexChanged += delegate {
+                if (source.SelectedIndex < 2 && bridge != null)
+                {
+                    string scope = source.SelectedIndex == 0 ? "account" : "local";
+                    if (scope != AppConfig.NormalizeUsageScope(config.UsageDisplayScope))
+                    { bridge.SetUsageScope(scope); try { config.Save(); } catch (IOException) { status.Text = "来源保存失败"; } catch (UnauthorizedAccessException) { status.Text = "来源保存失败"; } }
+                }
+                RenderReport();
+            };
             period.SelectedIndexChanged += delegate { RenderReport(); };
             refresh.Click += async delegate
             {
-                refresh.Enabled = false; status.Text = "正在读取新增日志…";
-                try { await service.RefreshAsync(); }
+                refresh.Enabled = false; status.Text = source.SelectedIndex == 0 ? "正在刷新账号统计…" : "正在读取新增日志…";
+                try {
+                    if (source.SelectedIndex == 0)
+                    {
+                        if (bridge == null) throw new InvalidOperationException("账号统计未连接");
+                        var provider = bridge.Codex as CodexStatusProvider; if (provider != null) provider.RequestUsageRefresh();
+                        await bridge.Codex.RefreshQuotaAsync();
+                    }
+                    else await service.RefreshAsync();
+                }
                 catch (Exception) { if (!IsDisposed) status.Text = "读取未完成，请稍后重试。"; }
                 finally { if (!IsDisposed) { refresh.Enabled = true; RenderReport(); } }
             };
@@ -93,7 +123,8 @@ namespace CodexToolsHost.UI
                     "也支持 codex monthly / session 的专用 JSON。统一多来源 JSON 不支持。导入结果独立显示，不与本机合计相加。", "ccusage 导入帮助", MessageBoxButtons.OK, MessageBoxIcon.None);
             };
             service.Changed += ServiceChanged;
-            HandleCreated += delegate { RenderReport(); };
+            if (bridge != null) { bridge.Codex.Changed += ServiceChanged; bridge.UsageScopeChanged += ScopeChanged; }
+            HandleCreated += delegate { ScopeChanged(); RenderReport(); };
             RenderReport();
         }
         private static Button Button(string text, string name, int width)
@@ -105,6 +136,7 @@ namespace CodexToolsHost.UI
         {
             Panel card = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, Margin = new Padding(0, 0, 8, 0), Padding = new Padding(10, 5, 5, 4) };
             Label label = new Label { Text = caption, Dock = DockStyle.Top, Height = 20, ForeColor = Color.FromArgb(98, 113, 132) };
+            value.Tag = label;
             value.Dock = DockStyle.Fill; value.Font = summaryFont; value.AutoEllipsis = true; value.TextAlign = ContentAlignment.MiddleLeft;
             card.Controls.Add(value); card.Controls.Add(label); return card;
         }
@@ -137,7 +169,17 @@ namespace CodexToolsHost.UI
         private void RenderReport()
         {
             if (IsDisposed || Disposing) return;
-            UsageReport report = source.SelectedIndex == 1 && imported != null ? imported : service.Report;
+            bool accountView = source.SelectedIndex == 0;
+            heading.Text = accountView ? "整个账号 Token 用量" : source.SelectedIndex == 2 ? "独立导入 Token 用量" : "本机 Token 用量";
+            description.Text = accountView ? "服务端累计量与按日汇总 · 自动查询，可能延迟 · 不显示逐秒速率。" : "每 5 秒增量刷新 · 缓存属于输入，推理属于输出。";
+            string allLabel = accountView ? "已返回全部日期" : "全部会话";
+            if (!Equals(period.Items[3], allLabel)) period.Items[3] = allLabel;
+            importButton.Enabled = !accountView;
+            for (int i = 1; i <= 4; i++) grid.Columns[i].Visible = !accountView;
+            if (accountView) { RenderAccount(); return; }
+            ((Label)summary.Tag).Text = "所选周期总计"; ((Label)inputSummary.Tag).Text = "输入 · 含缓存";
+            ((Label)cacheSummary.Tag).Text = "缓存 · 输入子集"; ((Label)outputSummary.Tag).Text = "输出 · 含推理";
+            UsageReport report = source.SelectedIndex == 2 && imported != null ? imported : service.Report;
             bool aggregateImport = report.IsImported && report.PeriodKind != "daily";
             period.Enabled = !aggregateImport;
             IEnumerable<UsageRow> selected = report.Rows;
@@ -166,6 +208,40 @@ namespace CodexToolsHost.UI
                 " · " + visibleRows.Count + " 行" + (report.IsImported ? "" : " · 日志 " + report.FilesDiscovered + " 个" + (report.FilesPending > 0 ? " · 待扫描 " + report.FilesPending + " 个" : ""));
             coverage.Text = string.Join("  ", report.Warnings.ToArray());
         }
+        private void ScopeChanged()
+        {
+            if (IsDisposed || Disposing || !IsHandleCreated) return;
+            if (InvokeRequired) { try { BeginInvoke((Action)ScopeChanged); } catch (InvalidOperationException) { } return; }
+            source.SelectedIndex = AppConfig.NormalizeUsageScope(config.UsageDisplayScope) == "local" ? 1 : 0;
+            RenderReport();
+        }
+        private void RenderAccount()
+        {
+            period.Enabled = true;
+            var provider = bridge == null ? null : bridge.Codex as IAccountUsageSource;
+            var snapshot = provider == null ? AccountUsageSnapshot.Empty() : provider.AccountUsage;
+            IEnumerable<AccountUsageDay> days = snapshot.Days;
+            DateTime today = DateTime.Today;
+            if (period.SelectedIndex != 3)
+            {
+                DateTime first = period.SelectedIndex == 0 ? today : period.SelectedIndex == 1 ? today.AddDays(-6) : new DateTime(today.Year, today.Month, 1);
+                days = days.Where(d => d.Date >= first && d.Date <= today);
+            }
+            visibleAccountDays = days.OrderByDescending(d => d.Date).ToList();
+            visibleRows.Clear();
+            ((Label)summary.Tag).Text = "账号累计"; ((Label)inputSummary.Tag).Text = "已汇总周期合计";
+            ((Label)cacheSummary.Tag).Text = "最近统计日"; ((Label)outputSummary.Tag).Text = "最近日用量";
+            summary.Text = snapshot.LifetimeTokens.HasValue ? snapshot.LifetimeTokens.Value.ToString("N0") : "--";
+            inputSummary.Text = visibleAccountDays.Count == 0 ? "--" : visibleAccountDays.Sum(d => (decimal)d.Tokens).ToString("N0");
+            AccountUsageDay last = snapshot.Days.LastOrDefault();
+            cacheSummary.Text = last == null ? "--" : last.Date.ToString("yyyy-MM-dd");
+            outputSummary.Text = last == null ? "--" : last.Tokens.ToString("N0");
+            summary.ForeColor = snapshot.IsStale ? Color.FromArgb(156, 103, 36) : ForeColor;
+            grid.Rows.Clear();
+            foreach (AccountUsageDay day in visibleAccountDays) grid.Rows.Add(day.Date.ToString("yyyy-MM-dd"), "", null, null, null, day.Tokens);
+            status.Text = snapshot.Status + (snapshot.ObservedAt == DateTimeOffset.MinValue ? "" : " · 查询 " + snapshot.ObservedAt.ToLocalTime().ToString("HH:mm:ss")) + (snapshot.IsStale ? " · 数据不可用/已过期" : "");
+            coverage.Text = "默认显示整个账号的服务端统计；本机可在来源中切换。服务端不提供此处的输入/缓存/输出分项，尚未返回的日期不按0处理。累计量不等于下表已返回日期的简单合计，跨设备覆盖范围和汇总延迟以服务端为准。";
+        }
         private static string ShortId(string value) { return value != null && value.Length > 18 ? value.Substring(0, 8) + "…" + value.Substring(value.Length - 6) : value; }
         private void Import()
         {
@@ -175,8 +251,8 @@ namespace CodexToolsHost.UI
                 try
                 {
                     imported = CcusageImport.ReadFile(dialog.FileName);
-                    if (source.Items.Count == 1) source.Items.Add("ccusage JSON 导入");
-                    source.SelectedIndex = 1; RenderReport();
+                    if (source.Items.Count == 2) source.Items.Add("ccusage JSON 导入");
+                    source.SelectedIndex = 2; RenderReport();
                 }
                 catch (Exception ex)
                 {
@@ -190,14 +266,22 @@ namespace CodexToolsHost.UI
             using (SaveFileDialog dialog = new SaveFileDialog { Filter = "CSV 文件 (*.csv)|*.csv", FileName = "codex-usage-" + DateTime.Today.ToString("yyyyMMdd") + ".csv" })
             {
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
-                try { File.WriteAllText(dialog.FileName, UsageReport.ToCsv(visibleRows, source.SelectedIndex == 1 ? "ccusage JSON 独立导入" : "本机 Codex"), new UTF8Encoding(true)); status.Text = "已导出当前清单。"; }
+                try {
+                    string csv = source.SelectedIndex == 0 ? "来源,服务端日期,账号Token总数\r\n" + string.Join("\r\n", visibleAccountDays.Select(d => "整个账号," + d.Date.ToString("yyyy-MM-dd") + "," + d.Tokens.ToString(CultureInfo.InvariantCulture)).ToArray()) + "\r\n"
+                        : UsageReport.ToCsv(visibleRows, source.SelectedIndex == 2 ? "ccusage JSON 独立导入" : "本机 Codex");
+                    File.WriteAllText(dialog.FileName, csv, new UTF8Encoding(true)); status.Text = "已导出当前清单。";
+                }
                 catch (IOException) { status.Text = "导出失败，文件可能正在使用。"; }
                 catch (UnauthorizedAccessException) { status.Text = "导出失败，没有写入权限。"; }
             }
         }
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { service.Changed -= ServiceChanged; titleFont.Dispose(); summaryFont.Dispose(); bodyFont.Dispose(); }
+            if (disposing) {
+                service.Changed -= ServiceChanged;
+                if (bridge != null) { bridge.Codex.Changed -= ServiceChanged; bridge.UsageScopeChanged -= ScopeChanged; }
+                titleFont.Dispose(); summaryFont.Dispose(); bodyFont.Dispose();
+            }
             base.Dispose(disposing);
         }
     }

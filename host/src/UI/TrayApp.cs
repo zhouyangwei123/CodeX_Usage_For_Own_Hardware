@@ -41,6 +41,7 @@ namespace CodexToolsHost.UI
             if (string.IsNullOrWhiteSpace(codexHome))
                 codexHome = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex");
             _usage = new LocalUsageService(codexHome);
+            _bridge.UsageSource = _usage;
             _updates = new ReleaseUpdateService(typeof(TrayApp).Assembly.GetName().Version,
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CodexToolsHost", "cache"));
             _icon = new NotifyIcon
@@ -77,6 +78,18 @@ namespace CodexToolsHost.UI
             AddStyleOption(_quotaHudStyleItem, "柔光玻璃", "glass");
             AddStyleOption(_quotaHudStyleItem, "极简清晰", "minimal");
             AddStyleOption(_quotaHudStyleItem, "经典双色", "classic");
+            AddStyleOption(_quotaHudStyleItem, "像素 OLED", "pixel");
+            var usageSource = new ToolStripMenuItem("用量来源");
+            foreach (string scope in new[] { "account", "local" })
+            {
+                var option = new ToolStripMenuItem(scope == "account" ? "整个账号 · 按日汇总" : "本机 · 每分钟活动") { Tag = scope };
+                option.Click += delegate { _bridge.SetUsageScope((string)option.Tag); SaveConfigQuietly(); SyncSettingsHud(); };
+                usageSource.DropDownItems.Add(option);
+            }
+            menu.Opening += delegate {
+                foreach (ToolStripMenuItem option in usageSource.DropDownItems)
+                    option.Checked = (string)option.Tag == AppConfig.NormalizeUsageScope(_config.UsageDisplayScope);
+            };
             var oledItem = new ToolStripMenuItem("循环 OLED 页面");
             var oledAutoItem = new ToolStripMenuItem("开启 OLED 自动轮播");
             var rgbItem = new ToolStripMenuItem("RGB 模式");
@@ -100,6 +113,7 @@ namespace CodexToolsHost.UI
                 _quotaHudItem,
                 _quotaHudStyleItem,
                 _quotaHudChartItem,
+                usageSource,
                 _quotaHudSizeItem,
                 _quotaHudOpacityItem,
                 _quotaHudTopMostItem,

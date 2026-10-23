@@ -62,6 +62,7 @@ namespace CodexToolsHost.UI
         private bool _restoreQueued;
         private DateTimeOffset _refreshDeadline;
         private volatile bool _shutdown;
+        private bool IsPixel { get { return AppConfig.NormalizeQuotaHudStyle(_config.QuotaHudStyle) == "pixel"; } }
 
         public QuotaHudForm(AppConfig config, ICodexStatusSource source,
             IDeepSeekSource apiSource, Action refreshAction, BridgeService bridge)
@@ -243,6 +244,7 @@ namespace CodexToolsHost.UI
             _positionTimer.Stop();
             _source.Changed -= OnSourceChanged;
             _source.StatusChanged -= OnStatusChanged;
+            _bridge.UsageScopeChanged -= OnUsageScopeChanged;
             _apiSource.Changed -= OnApiSourceChanged;
             _openCodeGoSource.Changed -= OnOpenCodeGoSourceChanged;
             _bridge.PcMetricsChanged -= OnPcMetricsChanged;
@@ -348,10 +350,9 @@ namespace CodexToolsHost.UI
         {
             base.OnMouseUp(e);
             if (e.Button != MouseButtons.Left || _shutdown) return;
-            if (_usage != null && ScaleToClient(QuotaHudRenderer.ActivityToggleBounds()).Contains(e.Location))
+            if (_usage != null && ToggleHitClient().Contains(e.Location))
             { ToggleChart(); return; }
-            Rectangle refresh = _renderer.RefreshHitBounds(QuotaBounds());
-            refresh = ScaleToClient(refresh);
+            Rectangle refresh = RefreshHitClient();
             if (refresh.Contains(e.Location)) BeginRefreshVisual();
         }
 
@@ -400,10 +401,9 @@ namespace CodexToolsHost.UI
                     unchecked((short)(packed & 0xffff)),
                     unchecked((short)((packed >> 16) & 0xffff)));
                 Point client = PointToClient(screen);
-                Rectangle refresh = _renderer.RefreshHitBounds(QuotaBounds());
-                refresh = ScaleToClient(refresh);
-                bool activityHit = _usage != null && (ScaleToClient(QuotaHudRenderer.ActivityToggleBounds()).Contains(client)
-                    || ScaleToClient(QuotaHudRenderer.ActivityFooterBounds(_config.QuotaHudChartExpanded)).Contains(client));
+                Rectangle refresh = RefreshHitClient();
+                bool activityHit = _usage != null && (ToggleHitClient().Contains(client)
+                    || !IsPixel && ScaleToClient(QuotaHudRenderer.ActivityFooterBounds(_config.QuotaHudChartExpanded)).Contains(client));
                 message.Result = (IntPtr)(refresh.Contains(client) || activityHit
                     ? HTCLIENT : HTCAPTION);
                 return;
@@ -629,10 +629,15 @@ namespace CodexToolsHost.UI
 
         private Size CanonicalWindowSize()
         {
+            if (IsPixel) return new Size(512, (_config.QuotaHudChartExpanded ? 64 : 28) * 4);
             if (_usage != null) return QuotaHudRenderer.ActivityWindowSize(_config.QuotaHudChartExpanded);
             return new Size(_renderer.PreferredSize.Width,
                 _renderer.PreferredSize.Height + ApiGap + ApiHeight);
         }
+        private Rectangle RefreshHitClient()
+        { return ScaleToClient(IsPixel ? new Rectangle(0, 0, 304, 56) : _renderer.RefreshHitBounds(QuotaBounds())); }
+        private Rectangle ToggleHitClient()
+        { return ScaleToClient(IsPixel ? new Rectangle(0, (_config.QuotaHudChartExpanded ? 56 : 20) * 4, 512, 32) : QuotaHudRenderer.ActivityToggleBounds()); }
 
         private Rectangle ScaleToClient(Rectangle canonical)
         {
@@ -683,10 +688,14 @@ namespace CodexToolsHost.UI
         // Caller owns the returned bitmap; rendering never creates a native window.
         internal Bitmap RenderFrame()
         {
-            if (_usage != null) return _renderer.RenderActivityFrame(ClientSize, _snapshot, _config.QuotaHudStyle,
+            var scope = AppConfig.NormalizeUsageScope(_config.UsageDisplayScope);
+            var usageFrame = _bridge.GetOledUsage(scope == "account");
+            if (IsPixel) return OledPixelRenderer.Render(ClientSize, usageFrame, _bridge.PcMetrics, _config.QuotaHudChartExpanded);
+            var accountSource = _source as IAccountUsageSource;
+            if (_usage != null) return _renderer.RenderUsageFrame(ClientSize, _snapshot, _config.QuotaHudStyle,
                 _animationAngle, _refreshing, _apiDisplayText, _networkDisplayText,
                 _apiStale, _apiAvailable || _apiUnlimited, _apiIsOpenCodeGo, UsesOpaqueFallback,
-                _activitySnapshot, _config.QuotaHudChartExpanded);
+                _activitySnapshot, _config.QuotaHudChartExpanded, usageFrame, accountSource == null ? null : accountSource.AccountUsage);
             return _renderer.RenderFrame(ClientSize, _snapshot, _config.QuotaHudStyle,
                 _animationAngle, _refreshing, _apiDisplayText, _networkDisplayText,
                 _apiStale, _apiAvailable || _apiUnlimited, _apiIsOpenCodeGo, UsesOpaqueFallback);

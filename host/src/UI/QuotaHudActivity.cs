@@ -21,8 +21,11 @@ namespace CodexToolsHost.UI
             _activityTimer.Interval=1000;
             _activityTimer.Tick+=delegate{if(!_shutdown&&Visible&&RefreshActivity(false))RequestRender();};
             _usage.Changed+=OnUsageChanged;
+            _bridge.UsageScopeChanged+=OnUsageScopeChanged;
             RefreshActivity(true);
         }
+        private void OnUsageScopeChanged()
+        { RunOnUiThread(delegate { RefreshActivity(true); ApplyDisplaySettings(); }); }
         private void OnUsageChanged()
         {
             // Check HWND before InvokeRequired: it reports false on background threads before

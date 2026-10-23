@@ -10,6 +10,7 @@ using CodexToolsHost.Model;
 using CodexToolsHost.Monitor;
 using CodexToolsHost.Protocol;
 using CodexToolsHost.Quota;
+using CodexToolsHost.Usage;
 
 namespace CodexToolsHost.Core
 {
@@ -38,6 +39,9 @@ namespace CodexToolsHost.Core
         private const int OledPageCooldownMs = 500;
         private int _lastOledPageChangeMs;
         private bool _hasOledPageChange;
+        private readonly OledUsageProjector _oledUsage = new OledUsageProjector();
+        internal LocalUsageService UsageSource { get; set; }
+        public bool SupportsUsagePage { get { return _firmwareMajor > 0 || _firmwareMinor >= 10; } }
 
         public event Action<string> StatusChanged;
         public event Action<string> Balloon;
@@ -45,6 +49,7 @@ namespace CodexToolsHost.Core
         public event Action DeviceConnected;
         public event Action DeviceDisconnected;
         public event Action<PcMetricsSnapshot> PcMetricsChanged;
+        public event Action UsageScopeChanged;
 
         public BridgeService(AppConfig config)
             : this(config, new SerialLink(config.SerialPort),
@@ -139,6 +144,26 @@ namespace CodexToolsHost.Core
         public IOpenCodeGoQuotaSource OpenCodeGo { get { return _openCodeGo; } }
         public PcMetricsSnapshot PcMetrics { get { return _pcMonitor.Current; } }
         public MijiaService Mijia { get { return _mijia; } }
+        public void SetUsageScope(string scope)
+        {
+            _config.UsageDisplayScope = AppConfig.NormalizeUsageScope(scope);
+            _config.DefaultOledPage = _config.UsageDisplayScope == "local" ? 4 : 0;
+            SetOledPage(_config.DefaultOledPage);
+            _dirty = true;
+            var changed = UsageScopeChanged; if (changed != null) changed();
+        }
+        public OledUsageFrame GetOledUsage(bool accountView)
+        {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            UsageActivitySnapshot activity = null;
+            try { if (!accountView && UsageSource != null) activity = UsageActivity.Create(UsageSource.Report, now); }
+            catch (OverflowException) { activity = new UsageActivitySnapshot { IsStale = true }; }
+            var source = _codex as IAccountUsageSource;
+            return _oledUsage.Create(accountView, _codex.Quota, activity,
+                source == null ? null : source.AccountUsage, _deepseek.BalanceCents,
+                !IsOpenCodeGoSelected() && _deepseek.Available, _deepseek.IsStale,
+                !IsOpenCodeGoSelected() && _deepseek.Unlimited, now);
+        }
 
         public void ReconnectDevice()
         {
@@ -240,7 +265,7 @@ namespace CodexToolsHost.Core
             SendRgb(_config.Rgb.Mode);
             SendRgbStatusColors();
             _link.Send(FrameCodec.MsgOledCfg, new byte[] { (byte)_config.OledAddress, (byte)_config.OledDriver });
-            _oledPage = Math.Max(0, Math.Min(2, _config.DefaultOledPage));
+            _oledPage = _config.DefaultOledPage == 4 ? (SupportsUsagePage ? 4 : 0) : Math.Max(0, Math.Min(2, _config.DefaultOledPage));
             _link.Send(FrameCodec.MsgOledPage, new byte[] { (byte)_oledPage, 0 });
             _link.Send(FrameCodec.MsgOledText, EncodeText(0, "CodeX Tools Host"));
             _link.Send(FrameCodec.MsgOledText, EncodeText(1, "https://codex.openai.com"));
@@ -269,6 +294,14 @@ namespace CodexToolsHost.Core
             payload.AddRange(Encoding.ASCII.GetBytes(text));
             _link.Send(FrameCodec.MsgStatus, payload.ToArray());
             SendPcMetrics();
+            SendOledUsage();
+        }
+
+        private void SendOledUsage()
+        {
+            if (!_link.IsConnected || !SupportsUsagePage) return;
+            _link.Send(FrameCodec.MsgOledUsage, GetOledUsage(false).Encode());
+            _link.Send(FrameCodec.MsgAccountUsage, GetOledUsage(true).Encode());
         }
 
         private void SendPcMetrics()
@@ -353,6 +386,8 @@ namespace CodexToolsHost.Core
             }
             RaiseStatus("设备: " + model + " (FW " + payload[0] + "." + payload[1] + ") " + oledText);
             SendPcMetrics();
+            if (SupportsUsagePage && _config.DefaultOledPage == 4) SetOledPage(4);
+            SendOledUsage();
         }
 
         /* ---------- IHostService ---------- */
@@ -368,7 +403,7 @@ namespace CodexToolsHost.Core
                     return;
                 _hasOledPageChange = true;
                 _lastOledPageChangeMs = now;
-                _oledPage = (_oledPage + 1) % 3;
+                _oledPage = SupportsUsagePage ? (_oledPage == 0 ? 1 : _oledPage == 1 ? 4 : _oledPage == 4 ? 2 : 0) : (_oledPage + 1) % 3;
                 page = _oledPage;
             }
             _link.Send(FrameCodec.MsgOledPage, new byte[] { (byte)page, 0 });
@@ -376,7 +411,7 @@ namespace CodexToolsHost.Core
 
         public void SetOledPage(int page)
         {
-            page = Math.Max(0, Math.Min(2, page));
+            page = page == 4 ? (SupportsUsagePage ? 4 : 0) : Math.Max(0, Math.Min(2, page));
             lock (_pageSync)
             {
                 _oledPage = page;
@@ -395,6 +430,8 @@ namespace CodexToolsHost.Core
 
         public void RefreshQuota()
         {
+            var accountProvider = _codex as CodexStatusProvider;
+            if (accountProvider != null) accountProvider.RequestUsageRefresh();
             try { ObserveBackground(_codex.RefreshQuotaAsync(), "Codex 额度刷新失败"); }
             catch (Exception) { }
             try

@@ -11,7 +11,9 @@ if (-not $Install) {
 }
 $hostExe = Join-Path $PackageDirectory 'CodexToolsHost.exe'
 $bootFile = Join-Path $PackageDirectory 'Bootloader-1.0.bin'
-$appFile = Join-Path $PackageDirectory 'Application-0.9.bin'
+$applications = @(Get-ChildItem -LiteralPath $PackageDirectory -Filter 'Application-*.bin' -File)
+if ($applications.Count -ne 1) { throw '安装目录必须且只能包含一个Application-*.bin。' }
+$appFile = $applications[0].FullName
 foreach ($path in @($ProgrammerPath,$hostExe,$bootFile,$appFile)) {
  if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "文件不存在：$path" }
 }
@@ -21,4 +23,4 @@ $installer = New-Object CodexToolsHost.Updates.StLinkFirmwareInstaller($programm
 $backupRoot = Join-Path $env:LOCALAPPDATA 'CodexToolsHost\firmware-backups'
 $backup = $installer.Install([IO.File]::ReadAllBytes($bootFile),[IO.File]::ReadAllBytes($appFile),$backupRoot)
 Write-Output "安装、回读校验和启动区保护完成。备份位置：$backup"
-Write-Output '请用KEY1按住上电测试DFU恢复，并验证正常启动的FW 0.9。'
+Write-Output ('请用KEY1按住上电测试DFU恢复，并验证正常启动的FW ' + [CodexToolsHost.Updates.FirmwareImage]::Version([IO.File]::ReadAllBytes($appFile)) + '。')

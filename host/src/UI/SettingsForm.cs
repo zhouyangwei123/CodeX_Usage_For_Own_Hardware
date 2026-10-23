@@ -213,7 +213,7 @@ namespace CodexToolsHost.UI
             if (_usage != null)
             {
                 var usagePage = new TabPage("用量清单") { Padding = new Padding(0) };
-                usagePage.Controls.Add(new UsagePanel(_usage) { Dock = DockStyle.Fill });
+                usagePage.Controls.Add(new UsagePanel(_usage, _bridge, _config) { Dock = DockStyle.Fill });
                 _tabs.TabPages.Add(usagePage);
             }
             foreach (TabPage page in _tabs.TabPages)
@@ -816,7 +816,7 @@ namespace CodexToolsHost.UI
 
             layout.Controls.Add(new Label { Text = "默认 OLED 页：", TextAlign = ContentAlignment.MiddleRight }, 0, 0);
             _pageCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList };
-            _pageCombo.Items.AddRange(new object[] { "0 状态/额度", "1 PC 监控+动画", "2 自动轮播" });
+            _pageCombo.Items.AddRange(new object[] { "0 额度/账号用量", "1 PC 监控+动画", "2 自动轮播", "4 本机用量" });
             layout.Controls.Add(_pageCombo, 1, 0);
 
             layout.Controls.Add(new Label { Text = "RGB 模式：", TextAlign = ContentAlignment.MiddleRight }, 0, 1);
@@ -914,9 +914,9 @@ namespace CodexToolsHost.UI
             for (int row = 0; row < 7; row++) panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
             panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 270));
             _hudStyle = new ComboBox { Name = "hudStyle", DropDownStyle = ComboBoxStyle.DropDownList, Width = 260 };
-            _hudStyle.Items.AddRange(new object[] { "柔光玻璃", "极简清晰", "经典双色" });
+            _hudStyle.Items.AddRange(new object[] { "柔光玻璃", "极简清晰", "经典双色", "像素 OLED" });
             string style = AppConfig.NormalizeQuotaHudStyle(_config.QuotaHudStyle);
-            _hudStyle.SelectedIndex = style == "minimal" ? 1 : style == "classic" ? 2 : 0;
+            _hudStyle.SelectedIndex = style == "minimal" ? 1 : style == "classic" ? 2 : style == "pixel" ? 3 : 0;
             _hudScale = new ComboBox { Name = "hudScale", DropDownStyle = ComboBoxStyle.DropDownList, Width = 150 };
             _hudScale.Items.AddRange(new object[] { "60%", "75%", "90%", "100%" });
             _hudScale.SelectedIndex = Array.IndexOf(new[] { 60, 75, 90, 100 }, _config.QuotaHudScalePercent);
@@ -948,14 +948,14 @@ namespace CodexToolsHost.UI
                 catch (Exception) { _hudSavedStatus.ForeColor = Color.Firebrick; _hudSavedStatus.Text = "配置已保存；浮窗刷新未完成，可重新打开浮窗。"; }
             };
             panel.Controls.Add(apply, 1, 5);
-            _hudSavedStatus = new Label { AutoSize = true, Text = "柔光玻璃：通透底色与柔和高光；极简清晰：更高对比度。",
+            _hudSavedStatus = new Label { AutoSize = true, Text = "像素 OLED：与设备相同的刻度和底栏；用量来源可在“用量清单”页或托盘菜单切换。",
                 MaximumSize = new Size(520, 0), ForeColor = Color.FromArgb(75, 88, 106) };
             panel.Controls.Add(_hudSavedStatus, 0, 6); panel.SetColumnSpan(_hudSavedStatus, 2);
             var preview = new HudStylePreview { Dock = DockStyle.Fill, Style = style, ChartExpanded = _config.QuotaHudChartExpanded };
             _hudPreview = preview;
             panel.Controls.Add(preview, 0, 7); panel.SetColumnSpan(preview, 2);
             _hudStyle.SelectedIndexChanged += delegate
-            { preview.Style = _hudStyle.SelectedIndex == 1 ? "minimal" : _hudStyle.SelectedIndex == 2 ? "classic" : "glass"; };
+            { preview.Style = _hudStyle.SelectedIndex == 1 ? "minimal" : _hudStyle.SelectedIndex == 2 ? "classic" : _hudStyle.SelectedIndex == 3 ? "pixel" : "glass"; };
             _hudStyle.SelectedIndexChanged += delegate { MarkHudDirty(1); };
             _hudScale.SelectedIndexChanged += delegate { MarkHudDirty(2); };
             _hudOpacity.ValueChanged += delegate { MarkHudDirty(4); };
@@ -982,7 +982,7 @@ namespace CodexToolsHost.UI
             try
             {
                 string style = AppConfig.NormalizeQuotaHudStyle(_config.QuotaHudStyle);
-                if (committed || (_hudDirtyFields & 1) == 0) _hudStyle.SelectedIndex = style == "minimal" ? 1 : style == "classic" ? 2 : 0;
+                if (committed || (_hudDirtyFields & 1) == 0) _hudStyle.SelectedIndex = style == "minimal" ? 1 : style == "classic" ? 2 : style == "pixel" ? 3 : 0;
                 if (committed || (_hudDirtyFields & 2) == 0) _hudScale.SelectedIndex = Array.IndexOf(new[] { 60, 75, 90, 100 }, _config.QuotaHudScalePercent);
                 if (committed || (_hudDirtyFields & 4) == 0) _hudOpacity.Value = (decimal)Math.Max(35, Math.Min(100, Math.Round(_config.QuotaHudOpacity * 100)));
                 if (committed || (_hudDirtyFields & 8) == 0) _hudVisible.Checked = _config.QuotaHudVisible;
@@ -1006,7 +1006,7 @@ namespace CodexToolsHost.UI
         private void StoreHudSettings()
         {
             if ((_hudDirtyFields & 1) != 0)
-                _config.QuotaHudStyle = _hudStyle.SelectedIndex == 1 ? "minimal" : _hudStyle.SelectedIndex == 2 ? "classic" : "glass";
+                _config.QuotaHudStyle = _hudStyle.SelectedIndex == 1 ? "minimal" : _hudStyle.SelectedIndex == 2 ? "classic" : _hudStyle.SelectedIndex == 3 ? "pixel" : "glass";
             int index = Math.Max(0, Math.Min(3, _hudScale.SelectedIndex));
             if ((_hudDirtyFields & 2) != 0) _config.QuotaHudScalePercent = new[] { 60, 75, 90, 100 }[index];
             if ((_hudDirtyFields & 4) != 0) _config.QuotaHudOpacity = (double)_hudOpacity.Value / 100;
@@ -1282,7 +1282,7 @@ namespace CodexToolsHost.UI
                 ? "最近查询无错误"
                 : "最近错误: " + _bridge.OpenCodeGo.LastError;
 
-            _pageCombo.SelectedIndex = Math.Max(0, Math.Min(2, _config.DefaultOledPage));
+            _pageCombo.SelectedIndex = _config.DefaultOledPage == 4 ? 3 : Math.Max(0, Math.Min(2, _config.DefaultOledPage));
             _rgbMode.SelectedItem = EnToZh(_config.Rgb.Mode, RgbModesZh, RgbModes);
             _rgbBrightness.Value = Math.Max(0, Math.Min(255, _config.Rgb.Brightness));
             _rgbPeriod.Value = Math.Max(100, _config.Rgb.PeriodMs);
@@ -1564,7 +1564,7 @@ namespace CodexToolsHost.UI
             _config.OpenCodeGoApiKey = _goKey.Text.Trim();
             _config.OpenCodeGoRefreshSeconds = (int)_goRefresh.Value;
             _config.QuotaDisplaySource = CurrentQuotaDisplaySource();
-            _config.DefaultOledPage = Math.Max(0, Math.Min(2, _pageCombo.SelectedIndex));
+            _config.DefaultOledPage = _pageCombo.SelectedIndex == 3 ? 4 : Math.Max(0, Math.Min(2, _pageCombo.SelectedIndex));
             _config.Rgb.Mode = ZhToEn(
                 Convert.ToString(_rgbMode.SelectedItem ?? RgbModesZh[0]),
                 RgbModesZh, RgbModes, "status");

@@ -16,6 +16,7 @@
 #include "protocol.h"
 #include "firmware_update.h"
 #include "ui_header.h"
+#include "usage_oled.h"
 #include "usb_device.h"
 #include "usbd_core.h"
 
@@ -64,6 +65,7 @@ typedef struct
 } host_status_t;
 
 static host_status_t host;
+static usage_oled_t usage_data[2];
 static uint8_t host_linked = 0;
 static uint8_t usb_was_configured = 0;
 static uint8_t info_sent = 0;
@@ -113,7 +115,7 @@ static void oled_request_redraw(void)
 static void set_visible_page(uint8_t page, uint32_t now_ms)
 {
   (void)now_ms;
-  if (page > OLED_PAGE_MONITOR) page = OLED_PAGE_STATUS;
+  if (page != OLED_PAGE_STATUS && page != OLED_PAGE_MONITOR && page != OLED_PAGE_LOCAL) page = OLED_PAGE_STATUS;
   visible_page = page;
   oled_request_redraw();
 }
@@ -170,19 +172,6 @@ static const int16_t sin8[64] = {
   72, 61, 49, 37, 25, 12, 0, -12, -25, -37, -49, -61, -72, -83, -93, -102,
   -110, -118, -124, -129, -134, -137, -140, -142, -143, -143, -143, -142, -140, -137, -134, -129
 };
-
-static const char *codex_state_str(uint8_t s)
-{
-  switch (s)
-  {
-    case CODEX_STATE_IDLE:     return "IDLE";
-    case CODEX_STATE_RUNNING:  return "RUN";
-    case CODEX_STATE_WAITING:  return "WAIT";
-    case CODEX_STATE_ERROR:    return "ERROR";
-    case CODEX_STATE_COMPLETE: return "DONE";
-    default:                   return "OFF";
-  }
-}
 
 /* ---------------- 协议消息处理 ---------------- */
 
@@ -301,6 +290,17 @@ void app_on_message(uint8_t type, const uint8_t *payload, uint8_t len)
 {
   switch (type)
   {
+    case MSG_OLED_USAGE:
+    case MSG_ACCOUNT_USAGE:
+    {
+      uint8_t view = type == MSG_ACCOUNT_USAGE ? 1u : 0u;
+      usage_oled_t next;
+      if (usage_oled_parse(&next, payload, len) && next.view == view)
+      {
+        next.received_ms = HAL_GetTick(); usage_data[view] = next; oled_request_redraw();
+      }
+      break;
+    }
     case MSG_STATUS:
       parse_status(payload, len);
       break;
@@ -380,52 +380,6 @@ static void render_activity_spinner(uint32_t now_ms, uint8_t active)
   }
 }
 
-static const uint8_t *compact_network_glyph(char ch)
-{
-  static const uint8_t glyphs[][3] =
-  {
-    {0x1fu, 0x11u, 0x1fu}, /* 0 */
-    {0x12u, 0x1fu, 0x10u}, /* 1 */
-    {0x1du, 0x15u, 0x17u}, /* 2 */
-    {0x15u, 0x15u, 0x1fu}, /* 3 */
-    {0x07u, 0x04u, 0x1fu}, /* 4 */
-    {0x17u, 0x15u, 0x1du}, /* 5 */
-    {0x1fu, 0x15u, 0x1du}, /* 6 */
-    {0x01u, 0x01u, 0x1fu}, /* 7 */
-    {0x1fu, 0x15u, 0x1fu}, /* 8 */
-    {0x17u, 0x15u, 0x1fu}, /* 9 */
-    {0x1fu, 0x0au, 0x11u}, /* K */
-    {0x1fu, 0x06u, 0x1fu}, /* M */
-    {0x1fu, 0x11u, 0x1du}, /* G */
-    {0x00u, 0x10u, 0x00u}, /* . */
-    {0x04u, 0x04u, 0x04u}, /* - */
-    {0x02u, 0x1fu, 0x02u}, /* U: up arrow */
-    {0x08u, 0x1fu, 0x08u}  /* D: down arrow */
-  };
-  static const char symbols[] = "0123456789KMG.-UD";
-
-  const char *found = strchr(symbols, ch);
-  if (found == NULL) return NULL;
-  return glyphs[(uint8_t)(found - symbols)];
-}
-
-static void draw_compact_network_string(uint8_t x, uint8_t y,
-                                        const char *text)
-{
-  while (*text != '\0')
-  {
-    const uint8_t *glyph = compact_network_glyph(*text++);
-    if (glyph != NULL)
-    {
-      for (uint8_t col = 0u; col < UI_HEADER_COMPACT_WIDTH; col++)
-        for (uint8_t row = 0u; row < 5u; row++)
-          if ((glyph[col] & (uint8_t)(1u << row)) != 0u)
-            oled_draw_pixel((uint8_t)(x + col), (uint8_t)(y + row), 1);
-    }
-    x = (uint8_t)(x + UI_HEADER_COMPACT_ADVANCE);
-  }
-}
-
 static void render_header_network(uint32_t now_ms, uint8_t show_spinner,
                                   uint8_t active)
 {
@@ -439,8 +393,8 @@ static void render_header_network(uint32_t now_ms, uint8_t show_spinner,
                          host.pc_upload_kib_s, valid);
   ui_header_format_speed(download, sizeof(download), 'D',
                          host.pc_download_kib_s, valid);
-  draw_compact_network_string(UI_HEADER_UPLOAD_X, 4u, upload);
-  draw_compact_network_string(UI_HEADER_DOWNLOAD_X, 4u, download);
+  usage_oled_compact(UI_HEADER_UPLOAD_X, 4u, upload);
+  usage_oled_compact(UI_HEADER_DOWNLOAD_X, 4u, download);
 }
 
 #define UI_HEADER_RULE_WIDTH 52u
@@ -450,115 +404,14 @@ static void draw_short_header_rule(uint8_t y)
   oled_draw_hline(3, y, UI_HEADER_RULE_WIDTH, 1);
 }
 
-static void draw_dotted_hline(uint8_t y)
+static void render_page_usage(uint32_t now_ms, uint8_t view)
 {
-  for (uint8_t x = 3u; x <= 124u; x += 6u)
-    oled_draw_pixel(x, y, 1);
-}
-
-#define QUOTA_BAR_WIDTH 57u
-#define QUOTA_BAR_HEIGHT 5u
-
-/* 稀疏额度轨道：|------>       |。箭头之后保持空白，减少常亮像素。 */
-static void draw_sparse_quota_bar(uint8_t x, uint8_t y,
-                                  uint8_t value, uint8_t valid)
-{
-  uint8_t right = (uint8_t)(x + QUOTA_BAR_WIDTH - 1u);
-  uint8_t start = (uint8_t)(x + 3u);
-
-  oled_draw_vline(x, y, QUOTA_BAR_HEIGHT, 1);
-  oled_draw_vline(right, y, QUOTA_BAR_HEIGHT, 1);
-  if (!valid) return;
-
-  if (value > 100u) value = 100u;
-  uint8_t marker = (uint8_t)(start
-      + ((uint16_t)(right - 3u - start) * value) / 100u);
-
-  for (uint8_t px = start; px < marker; px += 4u)
-  {
-    oled_draw_pixel(px, y + 2u, 1);
-    if ((uint8_t)(px + 1u) < marker)
-      oled_draw_pixel(px + 1u, y + 2u, 1);
-  }
-
-  oled_draw_pixel(marker, y, 1);
-  oled_draw_pixel(marker + 1u, y + 1u, 1);
-  oled_draw_pixel(marker + 2u, y + 2u, 1);
-  oled_draw_pixel(marker + 1u, y + 3u, 1);
-  oled_draw_pixel(marker, y + 4u, 1);
-}
-
-static void format_status_metric(char *buf, const char *label,
-                                 uint8_t valid, uint8_t value)
-{
-  if (valid && value <= 100u)
-    sprintf(buf, "%s%u%%", label, (unsigned)value);
-  else
-    sprintf(buf, "%s--", label);
-}
-
-static void render_page_status(uint32_t now_ms)
-{
-  char buf[32];
-  char primary_buf[12];
-  char secondary_buf[12];
-  char cpu_buf[8];
-  char ram_buf[8];
-  char gpu_buf[8];
-  uint8_t primary_valid = (uint8_t)(host_linked && host.primary_rem <= 100u);
-  uint8_t secondary_valid = (uint8_t)(host_linked && host.secondary_rem <= 100u);
-  oled_clear(0);
-  oled_draw_string(UI_HEADER_CODEX_TEXT_X, 3, "CODEX ", 1);
-  oled_draw_string(UI_HEADER_STATUS_X, 3,
-      codex_state_str(host_linked ? host.codex_state : CODEX_STATE_OFFLINE), 1);
-  render_header_network(now_ms, 1u,
-      (uint8_t)(host_linked && host.codex_state == CODEX_STATE_RUNNING));
-  draw_short_header_rule(12u);
-
-  if (primary_valid)
-    sprintf(primary_buf, "PRI %u%%", (unsigned)host.primary_rem);
-  else
-    strcpy(primary_buf, "PRI n/a");
-  if (secondary_valid)
-    sprintf(secondary_buf, "SEC %u%%", (unsigned)host.secondary_rem);
-  else
-    strcpy(secondary_buf, "SEC n/a");
-  oled_draw_string(3, 16, primary_buf, 1);
-  oled_draw_string(67, 16, secondary_buf, 1);
-
-  draw_sparse_quota_bar(3u, 25u, host.primary_rem, primary_valid);
-  draw_sparse_quota_bar(67u, 25u, host.secondary_rem, secondary_valid);
-
-  draw_dotted_hline(31u);
-
-  if (host_linked && host.ds_available)
-  {
-    if (host.flags & 0x01u)
-      oled_draw_string(3, 34, "API U/L", 1);
-    else
-    {
-      sprintf(buf, "API CNY%lu.%02lu",
-              (unsigned long)(host.ds_balance_cents / 100),
-              (unsigned long)(host.ds_balance_cents % 100));
-      oled_draw_string(3, 34, buf, 1);
-    }
-  }
-  else
-    oled_draw_string(3, 34, "API n/a", 1);
-
-  draw_dotted_hline(45u);
-  format_status_metric(cpu_buf, "CPU",
-      (uint8_t)(host_linked && (host.pc_flags & PC_FLAG_CPU_VALID)),
-      host.pc_cpu_percent);
-  format_status_metric(ram_buf, "RAM",
-      (uint8_t)(host_linked && (host.pc_flags & PC_FLAG_MEMORY_VALID)),
-      host.pc_memory_percent);
-  format_status_metric(gpu_buf, "GPU",
-      (uint8_t)(host_linked && (host.pc_flags & PC_FLAG_GPU_LOAD_VALID)),
-      host.pc_gpu_percent);
-  oled_draw_string(3, 50, cpu_buf, 1);
-  oled_draw_string(44, 50, ram_buf, 1);
-  oled_draw_string(85, 50, gpu_buf, 1);
+  char upload[6], download[6];
+  uint8_t network = (uint8_t)(host_linked && (host.pc_flags & PC_FLAG_NETWORK_VALID) && !(host.pc_flags & PC_FLAG_STALE));
+  ui_header_format_speed(upload, sizeof(upload), 'U', host.pc_upload_kib_s, network);
+  ui_header_format_speed(download, sizeof(download), 'D', host.pc_download_kib_s, network);
+  uint32_t age = now_ms - usage_data[view].received_ms;
+  usage_oled_render(&usage_data[view], (uint8_t)(host_linked && age <= HOST_LINK_TIMEOUT_MS), age/1000u, upload, download);
 }
 
 /* ---------- PC MON 角落三维场景 ---------- */
@@ -899,7 +752,8 @@ static void oled_render(uint32_t now_ms)
   }
   else switch (visible_page)
   {
-    case OLED_PAGE_STATUS:  render_page_status(now_ms); break;
+    case OLED_PAGE_STATUS:  render_page_usage(now_ms, 1u); break;
+    case OLED_PAGE_LOCAL:   render_page_usage(now_ms, 0u); break;
     case OLED_PAGE_MONITOR: render_page_monitor(now_ms); break;
     default:                render_page_monitor(now_ms); break;
   }
@@ -1020,7 +874,7 @@ static void process_button_event(const button_event_t *ev)
   {
     if (ev->kind == BTN_EV_CLICK && allow_oled_page_change(HAL_GetTick()))
     {
-      set_oled_mode((uint8_t)((oled_page + 1u) % OLED_PAGE_COUNT), 0u,
+      set_oled_mode(app_next_oled_page(oled_page, 1), 0u,
                     HAL_GetTick());
     }
   }
@@ -1029,6 +883,8 @@ static void process_button_event(const button_event_t *ev)
 void app_init(void)
 {
   boot_ms = HAL_GetTick();
+  memset(usage_data, 0, sizeof(usage_data));
+  usage_data[1].view = 1;
   oled_page = OLED_PAGE_STATUS;
   visible_page = OLED_PAGE_STATUS;
   auto_page = OLED_PAGE_STATUS;
@@ -1126,9 +982,7 @@ void app_tick(void)
     if (!oled_noise_manual_active() && !host_linked
         && allow_oled_page_change(now))
     {
-      int16_t next = (int16_t)oled_page + delta;
-      while (next < 0) next += OLED_PAGE_COUNT;
-      set_oled_mode((uint8_t)(next % OLED_PAGE_COUNT), 0u, now);
+      set_oled_mode(app_next_oled_page(oled_page, delta), 0u, now);
     }
   }
 

@@ -6,6 +6,7 @@ using System.Drawing.Imaging;
 using System.Globalization;
 using CodexToolsHost.Model;
 using CodexToolsHost.Usage;
+using CodexToolsHost.Protocol;
 
 namespace CodexToolsHost.UI
 {
@@ -24,8 +25,15 @@ namespace CodexToolsHost.UI
         internal Bitmap RenderActivityFrame(Size size, QuotaSnapshot quota, string style,
             float angle, bool refreshing, string api, string network, bool apiStale,
             bool apiAvailable, bool apiIsGo, bool opaque, UsageActivitySnapshot activity, bool expanded)
+        { return RenderUsageFrame(size, quota, style, angle, refreshing, api, network, apiStale, apiAvailable, apiIsGo, opaque, activity, expanded, null, null); }
+        internal Bitmap RenderUsageFrame(Size size, QuotaSnapshot quota, string style,
+            float angle, bool refreshing, string api, string network, bool apiStale,
+            bool apiAvailable, bool apiIsGo, bool opaque, UsageActivitySnapshot activity, bool expanded,
+            OledUsageFrame usageFrame = null, AccountUsageSnapshot account = null)
         {
             if(size.Width<=0||size.Height<=0)throw new ArgumentOutOfRangeException("size");
+            if (usageFrame == null) usageFrame = new OledUsageProjector().Create(false, quota, activity, null, 0, false, false, false, DateTimeOffset.UtcNow);
+            if (style == "pixel") return OledPixelRenderer.Render(size, usageFrame, null, expanded);
             style=opaque?"minimal":NormalizeStyle(style);
             Size standard=ActivityWindowSize(expanded);
             float scale=size.Width/(float)standard.Width;
@@ -45,21 +53,23 @@ namespace CodexToolsHost.UI
                     DrawPanel(g,new RectangleF(1,1,standard.Width-2,standard.Height-2),style,opaque);
                     DrawActivityQuota(g,quota,angle,refreshing,style,label,percent,muted,ink);
                     g.DrawLine(separator,18,79,402,79);
-                    bool measured=activity!=null&&activity.IsReady&&!activity.IsStale&&activity.Status!="扫描中";
-                    string qualifier=activity!=null&&activity.IsPartial?"≥":"";
-                    string hour=measured?qualifier+FormatTokens(activity.HourTokens):"--";
-                    Text(g,"近 1 小时 · "+hour+" tokens",label,muted,new RectangleF(18,82,247,24),StringAlignment.Near);
-                    string status=activity==null?"扫描中":activity.Status=="正常"?
+                    bool accountView = usageFrame.View == 1;
+                    bool measured=usageFrame.Has(OledUsageFrame.UsageKnown)&&!usageFrame.Has(OledUsageFrame.UsageStale);
+                    string qualifier=usageFrame.Has(OledUsageFrame.Partial)?"≥":"";
+                    string hour=accountView ? account != null && account.LifetimeTokens.HasValue ? FormatTokens(account.LifetimeTokens.Value) : "--"
+                        : measured&&activity!=null?qualifier+FormatTokens(activity.HourTokens):"--";
+                    Text(g,(accountView?account != null && account.IsStale?"账号累计(过期) · ":"账号累计 · ":"本机近 1 小时 · ")+hour+" tokens",label,muted,new RectangleF(18,82,247,24),StringAlignment.Near);
+                    string status=accountView ? !measured ? "日汇总不可用" : "截至 "+usageFrame.Month.ToString("00")+"-"+usageFrame.Day.ToString("00") : activity==null?"扫描中":activity.Status=="正常"?
                         (activity.InputTokensPerMinute+activity.OutputTokensPerMinute==0?"无新记录":"10s/点"):activity.Status;
                     Text(g,status,label,muted,new RectangleF(268,82,103,24),StringAlignment.Far);
                     DrawChartToggle(g,expanded);
-                    if(expanded)DrawActivityChart(g,activity,label,muted,style);
+                    if(expanded)DrawUsageChart(g,usageFrame,label,muted,style);
                     int footer=expanded?211:111;
                     g.DrawLine(separator,18,footer,402,footer);
                     g.DrawLine(separator,151,footer+12,151,footer+74);
                     g.DrawLine(separator,280,footer+12,280,footer+74);
                     Text(g,apiIsGo?"API / GO":"API",label,muted,new RectangleF(18,footer+5,126,24),StringAlignment.Near);
-                    Text(g,"TOKEN /min",label,muted,new RectangleF(162,footer+5,112,24),StringAlignment.Near);
+                    Text(g,accountView?"TOKEN /day":"TOKEN /min",label,muted,new RectangleF(162,footer+5,112,24),StringAlignment.Near);
                     Text(g,"NET /s",label,muted,new RectangleF(292,footer+5,111,24),StringAlignment.Near);
                     string[] lines=(api??"--").Replace("\r","").Split('\n');
                     for(int i=0;i<lines.Length;i++)
@@ -74,8 +84,9 @@ namespace CodexToolsHost.UI
                     Color apiColor=apiStale?Color.FromArgb(166,180,198):apiAvailable?Color.FromArgb(125,231,194):Color.FromArgb(255,171,132);
                     using(var dot=new SolidBrush(apiColor))g.FillEllipse(dot,138,footer+14,4,4);
                     for(int i=0;i<2;i++)Text(g,i<lines.Length?lines[i].Trim():"",value,ink,new RectangleF(18,footer+29+i*22,128,23),StringAlignment.Near);
-                    Text(g,"↑入 "+(measured?qualifier+FormatTokens(activity.InputTokensPerMinute):"--"),value,ink,new RectangleF(162,footer+29,113,23),StringAlignment.Near);
-                    Text(g,"↓出 "+(measured?qualifier+FormatTokens(activity.OutputTokensPerMinute):"--"),value,ink,new RectangleF(162,footer+51,113,23),StringAlignment.Near);
+                    Text(g,accountView ? "日用量 "+(measured?OledUsageFrame.FormatCount(usageFrame.Current):"--") : "↑入 "+(measured?qualifier+OledUsageFrame.FormatCount(usageFrame.Input):"--"),value,ink,new RectangleF(162,footer+29,113,23),StringAlignment.Near);
+                    Text(g,accountView ? account != null && account.ObservedAt != DateTimeOffset.MinValue ? "查询 "+account.ObservedAt.ToLocalTime().ToString("HH:mm") : "等待账号统计"
+                        : "↓出 "+(measured?qualifier+OledUsageFrame.FormatCount(usageFrame.Output):"--"),value,ink,new RectangleF(162,footer+51,113,23),StringAlignment.Near);
                     string[] speeds=(network??"↑-- ↓--").Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);
                     for(int i=0;i<2;i++)Text(g,i<speeds.Length?speeds[i]:"--",value,ink,new RectangleF(292,footer+29+i*22,111,23),StringAlignment.Near);
                 }
@@ -86,21 +97,17 @@ namespace CodexToolsHost.UI
         private void DrawActivityQuota(Graphics g,QuotaSnapshot quota,float angle,bool refreshing,string style,Font label,Font value,Brush muted,Brush ink)
         {
             if(quota==null)quota=QuotaSnapshot.EmptyStale();
-            QuotaHudLayout layout=CalculateLayout(new Rectangle(0,0,420,78),quota);
-            Color primary=style=="classic"?Color.FromArgb(247,68,99):Color.FromArgb(89,224,210);
-            Color secondary=style=="classic"?Color.FromArgb(78,145,255):Color.FromArgb(155,163,255);
-            if(quota.PrimaryRemainingPercent.HasValue&&quota.PrimaryRemainingPercent.Value<20)primary=Color.FromArgb(255,153,112);
-            Rectangle[] tracks={layout.PrimaryTrack,layout.SecondaryTrack};Rectangle[] fills={layout.PrimaryFill,layout.SecondaryFill};
-            string[] labels={WindowLabel(quota.PrimaryWindowMinutes,"主窗口"),WindowLabel(quota.SecondaryWindowMinutes,"次窗口")};
-            string[] percentages={layout.PrimaryText,layout.SecondaryText};Color[] colors={primary,secondary};
-            using(var trough=new SolidBrush(Color.FromArgb(150,5,10,19)))for(int i=0;i<2;i++)
-            {
-                Text(g,labels[i],label,muted,new RectangleF(tracks[i].X,tracks[i].Y-24,tracks[i].Width-72,23),StringAlignment.Near);
-                Text(g,percentages[i],value,ink,new RectangleF(tracks[i].Right-65,tracks[i].Y-24,65,23),StringAlignment.Far);
-                FillRounded(g,trough,tracks[i],3f);
-                using(var fill=new SolidBrush(colors[i]))FillRounded(g,fill,fills[i],3f);
-            }
-            DrawRefresh(g,layout.RefreshHit,angle,refreshing,quota.IsStale);
+            int? remaining=quota.PrimaryWindowMinutes==10080?quota.PrimaryRemainingPercent:quota.SecondaryWindowMinutes==10080?quota.SecondaryRemainingPercent:null;
+            DateTimeOffset? reset=quota.PrimaryWindowMinutes==10080?quota.PrimaryResetsAt:quota.SecondaryWindowMinutes==10080?quota.SecondaryResetsAt:null;
+            Rectangle track=new Rectangle(18,37,338,8);
+            Color color=style=="classic"?Color.FromArgb(247,68,99):Color.FromArgb(89,224,210);
+            if(remaining.HasValue&&remaining.Value<20)color=Color.FromArgb(255,153,112);
+            Text(g,"CODEX / 7D",label,muted,new RectangleF(18,8,240,24),StringAlignment.Near);
+            Text(g,QuotaHudPresentation.FormatPercent(quota.IsStale?null:remaining),value,ink,new RectangleF(280,8,76,24),StringAlignment.Far);
+            using(var trough=new SolidBrush(Color.FromArgb(150,5,10,19)))FillRounded(g,trough,track,4f);
+            using(var fill=new SolidBrush(color))FillRounded(g,fill,FillRectangle(track,quota.IsStale?null:remaining),4f);
+            Text(g,quota.IsStale?"额度数据过期":"重置 "+QuotaHudPresentation.FormatResetCountdown(reset,DateTimeOffset.UtcNow),label,muted,new RectangleF(18,49,338,23),StringAlignment.Near);
+            DrawRefresh(g,RefreshHitBounds(new Rectangle(0,0,420,78)),angle,refreshing,quota.IsStale);
         }
         private static void DrawChartToggle(Graphics g,bool expanded)
         {
@@ -113,36 +120,38 @@ namespace CodexToolsHost.UI
                     new[]{new Point(x,y),new Point(x+6,y+5),new Point(x+12,y)});
             }
         }
-        private static void DrawActivityChart(Graphics g,UsageActivitySnapshot activity,Font label,Brush muted,string style)
+        private static void DrawUsageChart(Graphics g,OledUsageFrame frame,Font label,Brush muted,string style)
         {
-            RectangleF plot=new RectangleF(20,119,380,59);
+            RectangleF plot=new RectangleF(66,119,334,59);
+            bool known=frame.Has(OledUsageFrame.UsageKnown)&&!frame.Has(OledUsageFrame.UsageStale);
             Color color=style=="classic"?Color.FromArgb(116,174,255):Color.FromArgb(100,214,209);
-            var points=new List<PointF>();long maximum=1;
-            if(activity!=null&&activity.Points!=null)
-                foreach(var p in activity.Points)if(p.HasData)maximum=Math.Max(maximum,checked(p.InputTokens+p.OutputTokens));
-            double ceiling=maximum*1.12;
-            using(var line=new Pen(color,1.5f))
+            using(var pen=new Pen(color,1.5f))
             using(var fill=new SolidBrush(Color.FromArgb(22,color)))
+            using(var grid=new Pen(Color.FromArgb(45,155,183,211)))
             {
-                if(activity!=null&&activity.Points!=null&&activity.Points.Count>0)
+                if(known)
                 {
-                    DateTimeOffset end=activity.Points[activity.Points.Count-1].Time;
-                    foreach(var p in activity.Points)
+                    string[] ticks={OledUsageFrame.FormatCount(frame.Upper),frame.Upper==1?"0.5":frame.Upper==5?"2.5":OledUsageFrame.FormatCount(frame.Upper/2),"0"};
+                    for(int i=0;i<3;i++)
                     {
-                        if(!p.HasData){DrawChartSegment(g,points,plot.Bottom,line,fill);points.Clear();continue;}
-                        float x=plot.Left+(float)((p.Time-end.AddHours(-1)).TotalSeconds/3600d*plot.Width);
-                        float y=plot.Bottom-(float)((p.InputTokens+p.OutputTokens)/ceiling*plot.Height);
-                        points.Add(new PointF(Math.Max(plot.Left,Math.Min(plot.Right,x)),Math.Max(plot.Top,Math.Min(plot.Bottom,y))));
+                        float y=plot.Top+i*plot.Height/2;
+                        g.DrawLine(grid,plot.Left,y,plot.Right,y);
+                        Text(g,ticks[i],label,muted,new RectangleF(18,Math.Min(plot.Bottom-12,y-8),42,16),StringAlignment.Far);
                     }
-                    DrawChartSegment(g,points,plot.Bottom,line,fill);
+                    var points=new List<PointF>();
+                    for(int i=0;i<frame.Points.Length;i++)
+                    {
+                        if(frame.Points[i]==255){DrawChartSegment(g,points,plot.Bottom,pen,fill);points.Clear();continue;}
+                        points.Add(new PointF(plot.Left+i*plot.Width/(frame.Points.Length-1),plot.Bottom-frame.Points[i]*plot.Height/34));
+                    }
+                    DrawChartSegment(g,points,plot.Bottom,pen,fill);
+                    if(points.Count>0){PointF last=points[points.Count-1];using(var dot=new SolidBrush(color))g.FillEllipse(dot,last.X-2,last.Y-2,4,4);}
                 }
+                else Text(g,frame.View==1?"账号统计不可用或已过期":"本机统计不可用或已过期",label,muted,plot,StringAlignment.Center);
             }
-            using(var baseline=new Pen(Color.FromArgb(45,155,183,211)))g.DrawLine(baseline,plot.Left,plot.Bottom,plot.Right,plot.Bottom);
-            if(activity==null||!activity.IsReady||activity.IsStale||activity.Status=="扫描中")
-                Text(g,activity==null?"正在读取本机用量":activity.Status,label,muted,plot,StringAlignment.Center);
-            Text(g,"−60m",label,muted,new RectangleF(18,183,76,22),StringAlignment.Near);
-            Text(g,"输入+输出 /min",label,muted,new RectangleF(112,183,196,22),StringAlignment.Center);
-            Text(g,"现在",label,muted,new RectangleF(326,183,76,22),StringAlignment.Far);
+            Text(g,frame.View==1?"最近14日":"−60m",label,muted,new RectangleF(18,183,76,22),StringAlignment.Near);
+            Text(g,frame.View==1?"账号汇总 /day":"本机输入+输出 /min",label,muted,new RectangleF(100,183,218,22),StringAlignment.Center);
+            Text(g,frame.View==1?frame.Month==0?"--":frame.Month.ToString("00")+"-"+frame.Day.ToString("00"):"现在",label,muted,new RectangleF(326,183,76,22),StringAlignment.Far);
         }
         private static void DrawChartSegment(Graphics g,List<PointF> points,float baseline,Pen pen,Brush fill)
         {

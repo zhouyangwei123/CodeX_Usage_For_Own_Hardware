@@ -2,12 +2,15 @@
 $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 if(-not $PackageDirectory){$PackageDirectory=Join-Path $repo 'artifacts\usb-update\package'}
+$applications=@(Get-ChildItem -LiteralPath $PackageDirectory -Filter 'Application-*.bin' -File)
+if($applications.Count -ne 1){throw 'Expected exactly one application image'}
+$application=$applications[0]
 $out=Join-Path $repo 'artifacts\usb-update-tests'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $fw=Join-Path $repo 'firmware\STM32G474'
 & gcc -std=c99 -Wall -Wextra -Werror -O2 -I "$fw\Core\Inc" "$PSScriptRoot\image_tests.c" "$fw\Core\Src\firmware_image.c" -o "$out\image-tests.exe"
 if($LASTEXITCODE -ne 0){throw 'Image tests compile failed'}
-& "$out\image-tests.exe" "$PackageDirectory\Application-0.9.bin" "$PackageDirectory\Bootloader-1.0.bin" | Tee-Object -FilePath "$out\image-results.txt"
+& "$out\image-tests.exe" $application.FullName "$PackageDirectory\Bootloader-1.0.bin" | Tee-Object -FilePath "$out\image-results.txt"
 if($LASTEXITCODE -ne 0){throw 'Image tests failed'}
 & gcc -std=c99 -Wall -Wextra -Werror -O2 -I $PSScriptRoot -I "$fw\Core\Inc" "$PSScriptRoot\request_tests.c" "$fw\Core\Src\firmware_update.c" -o "$out\request-tests.exe"
 if($LASTEXITCODE -ne 0){throw 'Request tests compile failed'}
@@ -23,10 +26,10 @@ if($LASTEXITCODE -ne 0){throw 'Fake CLI compilation failed'}
 if($LASTEXITCODE -ne 0){throw 'Updater tests compilation failed'}
 & "$out\updater-tests.exe" $PackageDirectory $out "$fakeDir\FakeProgrammer.exe" | Tee-Object -FilePath "$out\updater-results.txt"
 if($LASTEXITCODE -ne 0){throw 'Updater tests failed'}
-$wrapperPackage=Join-Path $out '首次安装 测试包'
+$wrapperPackage=Join-Path $out ('首次安装 测试包 '+$application.BaseName)
 New-Item -ItemType Directory -Force -Path $wrapperPackage | Out-Null
 Copy-Item -LiteralPath "$out\CodexToolsHost.exe" -Destination $wrapperPackage -Force
-foreach($name in @('Bootloader-1.0.bin','Application-0.9.bin')) {
+foreach($name in @('Bootloader-1.0.bin',$application.Name)) {
  Copy-Item -LiteralPath (Join-Path $PackageDirectory $name) -Destination $wrapperPackage -Force
 }
 $wrapper=Join-Path $repo 'tools\Install-STLink.ps1'

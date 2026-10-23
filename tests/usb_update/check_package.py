@@ -50,8 +50,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('package')
     args = parser.parse_args()
-    expected = {'CodexToolsHost.exe', 'Bootloader-1.0.bin', 'Application-0.9.bin',
-                'Application-0.9.hex', 'FirstInstall-Boot1.0-FW0.9.hex',
+    with zipfile.ZipFile(args.package) as archive:
+        manifest = json.loads(archive.read('firmware-manifest.json'))
+    version = manifest.get('app_version', '0.9')
+    assert len(version.split('.')) == 2 and all(part.isdigit() for part in version.split('.'))
+    app_bin = f'Application-{version}.bin'
+    app_hex = f'Application-{version}.hex'
+    first_hex = f'FirstInstall-Boot1.0-FW{version}.hex'
+    expected = {'CodexToolsHost.exe', 'Bootloader-1.0.bin', app_bin,
+                app_hex, first_hex,
                 'firmware-manifest.json', 'Install-STLink.ps1', 'README.md',
                 'VALIDATION.md', 'THIRD-PARTY-NOTICES.md',
                 'OFFLINE-TEST-RESULTS.txt', 'SHA256SUMS.txt'}
@@ -72,14 +79,15 @@ def main():
     for name, detail in manifest['files'].items():
         assert len(files[name]) == detail['bytes']
         assert hashlib.sha256(files[name]).hexdigest() == detail['sha256']
-    boot, app = files['Bootloader-1.0.bin'], files['Application-0.9.bin']
+    boot, app = files['Bootloader-1.0.bin'], files[app_bin]
+    assert struct.unpack_from('<I', app, 532)[0] == (int(version.split('.')[0]) << 16 | int(version.split('.')[1]))
     image(boot, 0x08000000, 8192, 0x42544D4E)
     image(app, 0x08002000, 57344, 0x41544D4E)
     app_bytes = dict(enumerate(app, 0x08002000))
     combined = dict(enumerate(boot, 0x08000000))
     combined.update(app_bytes)
-    assert read_hex(files['Application-0.9.hex']) == app_bytes
-    assert read_hex(files['FirstInstall-Boot1.0-FW0.9.hex']) == combined
+    assert read_hex(files[app_hex]) == app_bytes
+    assert read_hex(files[first_hex]) == combined
     assert files['Install-STLink.ps1'].startswith(b'\xef\xbb\xbf')
     assert files['CodexToolsHost.exe'].startswith(b'MZ')
     print('PASS ZIP contents, all SHA-256 hashes, firmware CRC/vectors/bounds, HEX-to-BIN equality, PowerShell UTF-8 BOM')

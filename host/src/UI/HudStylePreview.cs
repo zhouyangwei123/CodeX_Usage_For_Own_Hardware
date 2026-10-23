@@ -5,6 +5,8 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using CodexToolsHost.Model;
 using CodexToolsHost.Usage;
+using CodexToolsHost.Protocol;
+using CodexToolsHost.Monitor;
 
 namespace CodexToolsHost.UI
 {
@@ -31,14 +33,22 @@ namespace CodexToolsHost.UI
                 HasData = true, InputTokens = (long)(2600 + 1300 * Math.Sin(i * .075)), OutputTokens = (long)(650 + 500 * Math.Cos(i * .07)) });
             var activity = new UsageActivitySnapshot { AsOf = now, IsReady = true, Status = "正常", InputTokensPerMinute = 3200,
                 OutputTokensPerMinute = 1000, HourTokens = 198000, Points = points.AsReadOnly() };
+            var days = new List<AccountUsageDay>();
+            for (int i = 0; i < 14; i++) days.Add(new AccountUsageDay { Date = DateTime.Today.AddDays(i - 14), Tokens = (long)(1800000 + 900000 * Math.Sin(i * .7)) });
+            var account = new AccountUsageSnapshot { Days = days.AsReadOnly(), ObservedAt = now, LifetimeTokens = 128000000, Status = "演示数据" };
+            var projection = new OledUsageProjector().Create(true, quota, activity, account, 678, true, false, false, now);
             Size canonical = QuotaHudRenderer.ActivityWindowSize(expanded);
-            using (var frame = renderer.RenderActivityFrame(new Size(315, (int)(canonical.Height * .75)), quota, style, 0, false,
-                "CNY 123.45\r\n已更新 12:30", "↑12K ↓1.2M", false, true, false, SystemInformation.HighContrast, activity, expanded))
+            using (var frame = style == "pixel" ? OledPixelRenderer.Render(new Size(256, expanded ? 128 : 56), projection,
+                new PcMetricsSnapshot { SampledAtUtc = now, NetworkSpeedAvailable = true, NetworkUploadKiBPerSecond = 80, NetworkDownloadKiBPerSecond = 1234 }, expanded)
+                : renderer.RenderUsageFrame(new Size(315, (int)(canonical.Height * .75)), quota, style, 0, false,
+                "CNY 6.78\r\n已更新 12:30", "↑80K ↓1.2M", false, true, false, SystemInformation.HighContrast, activity, expanded, projection, account))
                 e.Graphics.DrawImageUnscaled(frame, 0, 29);
         }
         protected override void OnMouseUp(MouseEventArgs e)
         {
             base.OnMouseUp(e);
+            if (style == "pixel")
+            { if (e.Button == MouseButtons.Left && new Rectangle(0, 29 + (expanded ? 112 : 40), 256, 16).Contains(e.Location)) ChartExpanded = !ChartExpanded; return; }
             var hit = QuotaHudRenderer.ActivityToggleBounds();
             var scaled = new Rectangle((int)(hit.X * .75), 29 + (int)(hit.Y * .75), (int)(hit.Width * .75), (int)(hit.Height * .75));
             if (e.Button == MouseButtons.Left && scaled.Contains(e.Location)) ChartExpanded = !ChartExpanded;

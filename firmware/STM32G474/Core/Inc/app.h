@@ -21,7 +21,17 @@
 #define OLED_PAGE_STATUS   0
 #define OLED_PAGE_MONITOR  1
 #define OLED_PAGE_AUTO     2
-#define OLED_PAGE_COUNT    3
+#define OLED_PAGE_LOCAL    4 /* 3 remains the legacy AUTO alias. */
+#define OLED_PAGE_COUNT    5
+
+static inline uint8_t app_next_oled_page(uint8_t page, int16_t delta)
+{
+  static const uint8_t pages[] = {OLED_PAGE_STATUS, OLED_PAGE_MONITOR, OLED_PAGE_LOCAL, OLED_PAGE_AUTO};
+  int index = page == OLED_PAGE_MONITOR ? 1 : page == OLED_PAGE_LOCAL ? 2 : page == OLED_PAGE_AUTO ? 3 : 0;
+  int next = (index + delta) % 4;
+  if (next < 0) next += 4;
+  return pages[next];
+}
 
 void app_init(void);
 void app_tick(void);

@@ -15,6 +15,11 @@ internal sealed class TestTransport : IJsonLineTransport
     public string QuotaResult = "{\"rateLimits\":{\"limitId\":\"codex\",\"primary\":{\"usedPercent\":43,\"windowDurationMins\":10080},\"secondary\":{\"usedPercent\":30,\"windowDurationMins\":300}}}";
     public string Account = "{\"account\":{\"type\":\"chatgpt\",\"email\":\"fixture@example.invalid\"}}";
     public bool HoldQuota;
+    public bool HoldUsage;
+    public int? UsageError;
+    public string UsageResult = "{\"summary\":{\"lifetimeTokens\":12345678901},\"dailyUsageBuckets\":[{\"startDate\":\"2026-10-22\",\"tokens\":6000000}]}";
+    public int UsageRequests;
+    public string HeldUsageId;
     public bool HoldAll;
     public bool ThrowOnSend;
     public bool BlockSend;
@@ -47,6 +52,13 @@ internal sealed class TestTransport : IJsonLineTransport
             Interlocked.Increment(ref QuotaRequests);
             if (HoldQuota) { HeldId = id; return; }
             result = QuotaResult;
+        }
+        if (method == "account/usage/read")
+        {
+            Interlocked.Increment(ref UsageRequests);
+            if (HoldUsage) { HeldUsageId = id; return; }
+            if (UsageError.HasValue) { Emit("{\"id\":\"" + id + "\",\"error\":{\"code\":" + UsageError + ",\"message\":\"fixture error\"}}"); return; }
+            result = UsageResult;
         }
         Reply(id, result);
     }
@@ -88,6 +100,58 @@ internal static class Runner
             for (int i = 0; i < 16000; i++) Console.Error.WriteLine(new string('x', 160));
             Console.Out.WriteLine("ready"); Console.Out.Flush(); Thread.Sleep(500); return 0;
         }
+        Run("account usage is 64 bit, throttled and manually refreshable", delegate {
+            var t = new TestTransport(); using (var p = Provider(t)) {
+                Check(p.AccountUsage.LifetimeTokens == 12345678901L && p.AccountUsage.Days[0].Tokens == 6000000, "account metrics lost");
+                Refresh(p); Check(t.UsageRequests == 1, "quota refresh unnecessarily polled account aggregates");
+                p.RequestUsageRefresh(); Refresh(p); Check(t.UsageRequests == 2 && !p.AccountUsage.IsStale, "manual refresh ignored");
+            }
+        });
+        Run("unsupported usage endpoint does not erase valid quota or invent local data", delegate {
+            var t = new TestTransport { UsageError = -32601 }; using (var p = Provider(t)) {
+                Check(!p.Quota.IsStale && p.Quota.PrimaryRemainingPercent == 57, "optional endpoint broke quota");
+                Check(p.AccountUsage.IsStale && !p.AccountUsage.LifetimeTokens.HasValue && p.AccountUsage.Days.Count == 0, "unavailable usage fabricated data");
+            }
+        });
+        Run("invalid usage retains stale account values without breaking quota", delegate {
+            var t = new TestTransport(); using (var p = Provider(t)) {
+                var observed = p.AccountUsage.ObservedAt;
+                t.UsageResult = "{\"summary\":{\"lifetimeTokens\":-1}}";
+                p.RequestUsageRefresh(); Refresh(p);
+                Check(!p.Quota.IsStale && p.AccountUsage.IsStale, "freshness scopes mixed");
+                Check(p.AccountUsage.LifetimeTokens == 12345678901L && p.AccountUsage.ObservedAt == observed, "last account result lost or marked fresh");
+            }
+        });
+        Run("usage authentication error clears both account values and quota", delegate {
+            var t = new TestTransport(); using (var p = Provider(t)) {
+                t.UsageError = 401; p.RequestUsageRefresh(); Refresh(p);
+                Check(!p.Quota.PrimaryRemainingPercent.HasValue && !p.AccountUsage.LifetimeTokens.HasValue, "signed out account retained values");
+            }
+        });
+        Run("account identity change clears usage before new quota fails", delegate {
+            var t = new TestTransport(); using (var p = Provider(t)) {
+                t.Account = "{\"account\":{\"type\":\"chatgpt\",\"email\":\"other@example.invalid\"}}";
+                t.QuotaResult = "{}"; Refresh(p);
+                Check(p.AccountUsage.Days.Count == 0 && !p.AccountUsage.LifetimeTokens.HasValue, "usage leaked across accounts");
+            }
+        });
+        Run("late usage response after logout cannot restore prior account", delegate {
+            var t = new TestTransport(); using (var p = Provider(t)) {
+                t.HoldUsage = true; p.RequestUsageRefresh(); var pending = p.RefreshQuotaAsync();
+                Check(SpinWait.SpinUntil(delegate { return t.HeldUsageId != null; }, 1000), "usage request not sent");
+                t.Emit("{\"method\":\"account/updated\",\"params\":{\"authMode\":null}}");
+                t.Reply(t.HeldUsageId, t.UsageResult);
+                Check(SpinWait.SpinUntil(delegate { return pending.IsCompleted; }, 1000), "late usage stuck");
+                GC.KeepAlive(pending.Exception);
+                Check(p.AccountUsage.Days.Count == 0 && !p.AccountUsage.LifetimeTokens.HasValue, "late usage restored logged out account");
+            }
+        });
+        Run("disconnected usage is stale and stop preserves stale state", delegate {
+            var t = new TestTransport(); using (var p = Provider(t)) {
+                t.Break(); Check(p.AccountUsage.IsStale, "disconnect left account fresh");
+                p.Stop(); Check(p.AccountUsage.IsStale, "stop left account fresh");
+            }
+        });
         Run("empty response preserves last good value and marks stale", delegate {
             var t = new TestTransport(); using (var p = Provider(t)) {
                 var observed = p.Quota.ObservedAt; t.QuotaResult = "{}"; Refresh(p);

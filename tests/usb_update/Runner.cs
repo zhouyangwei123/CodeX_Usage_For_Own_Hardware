@@ -73,7 +73,9 @@ class Runner
  }
  static int Main(string[] args)
  {
-  app=File.ReadAllBytes(Path.Combine(args[0],"Application-0.9.bin"));
+  string[] applications=Directory.GetFiles(args[0],"Application-*.bin");
+  if(applications.Length!=1)throw new IOException("Expected exactly one application image");
+  app=File.ReadAllBytes(applications[0]);
   boot=File.ReadAllBytes(Path.Combine(args[0],"Bootloader-1.0.bin"));
   root=Path.Combine(args[1],"中文 空格备份");Directory.CreateDirectory(root);
   Check("actual application validated",!Throws(()=>FirmwareImage.Validate(app,false,true)));

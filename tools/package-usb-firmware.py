@@ -44,12 +44,14 @@ def main():
     out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
     boot = seal(pathlib.Path(a.boot).read_bytes(), BOOT, APP-BOOT, 0x42544D4E)
     app = seal(pathlib.Path(a.app).read_bytes(), APP, LIMIT-APP, 0x41544D4E)
-    outputs = {"Bootloader-1.0.bin": boot, "Application-0.9.bin": app,
-        "Application-0.9.hex": hex_image([(APP, app)]).encode("ascii"),
-        "FirstInstall-Boot1.0-FW0.9.hex": hex_image([(BOOT, boot), (APP, app)]).encode("ascii")}
+    version_word = struct.unpack_from('<I', app, HEADER + 20)[0]
+    version = f'{version_word >> 16}.{version_word & 65535}'
+    outputs = {"Bootloader-1.0.bin": boot, f"Application-{version}.bin": app,
+        f"Application-{version}.hex": hex_image([(APP, app)]).encode("ascii"),
+        f"FirstInstall-Boot1.0-FW{version}.hex": hex_image([(BOOT, boot), (APP, app)]).encode("ascii")}
     for name, data in outputs.items(): (out/name).write_bytes(data)
     manifest = {"target":"STM32G474RBTx", "layout":1, "boot_address":BOOT,
-        "app_address":APP, "app_limit":LIMIT, "hardware_tested":False,
+        "app_address":APP, "app_limit":LIMIT, "hardware_tested":False, "app_version":version,
         "files":{name:{"bytes":len(data),"sha256":hashlib.sha256(data).hexdigest()}
                  for name,data in outputs.items()}}
     (out/"firmware-manifest.json").write_text(json.dumps(manifest, indent=2)+"\n", encoding="utf-8")

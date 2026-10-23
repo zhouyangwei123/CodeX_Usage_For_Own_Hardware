@@ -4,11 +4,12 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using CodexToolsHost.Model;
+using CodexToolsHost.Usage;
 
 namespace CodexToolsHost.Quota
 {
     /// <summary>A single cancellable supervisor owns the Codex child and quota polling.</summary>
-    public sealed class CodexStatusProvider : ICodexStatusSource, IDisposable
+    public sealed class CodexStatusProvider : ICodexStatusSource, IAccountUsageSource, IDisposable
     {
         public const int RequestTimeoutSeconds = 20;
         public const int CodexStateOffline = 0, CodexStateIdle = 1, CodexStateRunning = 2,
@@ -26,6 +27,8 @@ namespace CodexToolsHost.Quota
         private long _accountRevision;
         private string _identity;
         private QuotaSnapshot _quota = QuotaSnapshot.EmptyStale();
+        private AccountUsageSnapshot _accountUsage = AccountUsageSnapshot.Empty();
+        private DateTimeOffset _lastUsageAttempt;
         private int _state = CodexStateOffline;
         private string _statusText = "connecting...";
         private int _reconnectCount;
@@ -49,6 +52,8 @@ namespace CodexToolsHost.Quota
         public event Action Changed;
         public event Action<string> StatusChanged;
         public QuotaSnapshot Quota { get { lock (_sync) return _quota; } }
+        public AccountUsageSnapshot AccountUsage { get { lock (_sync) return DateTimeOffset.UtcNow - _accountUsage.ObservedAt > TimeSpan.FromMinutes(15)
+            ? _accountUsage.AsStale("账号统计已过期") : _accountUsage; } }
         public int State { get { lock (_sync) return _state; } }
         public string StatusText { get { lock (_sync) return _statusText; } }
         public string LastError { get { return Quota.LastError; } }
@@ -187,6 +192,8 @@ namespace CodexToolsHost.Quota
                 return _refreshTask;
             }
         }
+        public void RequestUsageRefresh()
+        { lock (_sync) _lastUsageAttempt = DateTimeOffset.MinValue; }
 
         private async Task RefreshCoreAsync(JsonLineRpcClient client, long revision, CancellationToken token)
         {
@@ -216,7 +223,8 @@ namespace CodexToolsHost.Quota
                     EnsureCurrent(client, revision, token);
                     if (_identity != identity)
                     {
-                        _quota = QuotaSnapshot.EmptyStale(); _identity = identity; changed = true;
+                        _quota = QuotaSnapshot.EmptyStale(); _accountUsage = AccountUsageSnapshot.Empty();
+                        _lastUsageAttempt = DateTimeOffset.MinValue; _identity = identity; changed = true;
                     }
                     _accountConfirmed = true;
                 }
@@ -230,6 +238,7 @@ namespace CodexToolsHost.Quota
                     _quota = snapshot; _consecutiveFailures = 0;
                 }
                 RaiseChanged();
+                await RefreshAccountUsageAsync(client, revision, token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
@@ -258,6 +267,36 @@ namespace CodexToolsHost.Quota
             // on this connection; reconnecting would receive the same notification again.
             if (revision != _accountRevision) throw new AccountChangedException();
         }
+        private async Task RefreshAccountUsageAsync(JsonLineRpcClient client, long revision, CancellationToken token)
+        {
+            lock (_sync)
+            {
+                EnsureCurrent(client, revision, token);
+                if (DateTimeOffset.UtcNow - _lastUsageAttempt < TimeSpan.FromMinutes(5)) return;
+                _lastUsageAttempt = DateTimeOffset.UtcNow;
+            }
+            try
+            {
+                var result = await client.RequestAsync("account/usage/read", null,
+                    TimeSpan.FromSeconds(RequestTimeoutSeconds), token).ConfigureAwait(false);
+                var snapshot = AccountUsageSnapshot.Parse(result, DateTimeOffset.UtcNow);
+                lock (_sync) { EnsureCurrent(client, revision, token); _accountUsage = snapshot; }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (AccountChangedException) { throw; }
+            catch (Exception ex)
+            {
+                var rpc = ex as CodexRpcException;
+                if (rpc != null && rpc.IsAuthenticationError) throw;
+                lock (_sync)
+                {
+                    EnsureCurrent(client, revision, token);
+                    _accountUsage = _accountUsage.AsStale(rpc != null && rpc.Code == -32601
+                        ? "当前Codex不提供账号统计" : "账号统计读取失败，保留最近结果");
+                }
+            }
+            RaiseChanged();
+        }
         private static string IdentityText(IDictionary<string, object> account, string key)
         {
             object value;
@@ -270,6 +309,7 @@ namespace CodexToolsHost.Quota
             {
                 if (!ReferenceEquals(_client, client) || revision != _accountRevision) return;
                 _quota = QuotaSnapshot.EmptyStale().AsStale(error);
+                _accountUsage = AccountUsageSnapshot.Empty(); _lastUsageAttempt = DateTimeOffset.MinValue;
                 _identity = null; _accountConfirmed = false;
             }
             RaiseChanged();
@@ -290,6 +330,7 @@ namespace CodexToolsHost.Quota
                 if (!ReferenceEquals(sender, _client) || _stopped) return;
                 if (_connectionLifetime != null) _connectionLifetime.Cancel();
                 _quota = _quota.AsStale("额度连接已断开，正在重连");
+                _accountUsage = _accountUsage.AsStale("账号统计连接已断开");
             }
             RaiseChanged();
         }
@@ -304,6 +345,7 @@ namespace CodexToolsHost.Quota
                     _accountRevision++; _identity = null;
                     _accountConfirmed = false;
                     _quota = QuotaSnapshot.EmptyStale().AsStale("账户已变化，等待重新获取额度");
+                    _accountUsage = AccountUsageSnapshot.Empty(); _lastUsageAttempt = DateTimeOffset.MinValue;
                 }
                 RaiseChanged();
                 return;
@@ -341,6 +383,7 @@ namespace CodexToolsHost.Quota
                 if (_stopped) return;
                 _stopped = true; _ready = false; lifetime = _lifetime; client = _client;
                 _quota = _quota.AsStale("额度服务已停止"); _state = CodexStateOffline; _statusText = "stopped";
+                _accountUsage = _accountUsage.AsStale("账号统计服务已停止");
             }
             try { if (lifetime != null) lifetime.Cancel(); } catch (ObjectDisposedException) { }
             if (client != null) client.Dispose();

@@ -83,6 +83,7 @@ namespace CodexToolsHost.Model
             QuotaHudTopMost = true;
             QuotaHudStyle = "glass";
             QuotaHudChartExpanded = true;
+            UsageDisplayScope = "account";
             UpdateChecksEnabled = true;
             QuotaHudX = null;
             QuotaHudY = null;
@@ -104,8 +105,11 @@ namespace CodexToolsHost.Model
         {
             if (string.Equals(value, "minimal", StringComparison.OrdinalIgnoreCase)) return "minimal";
             if (string.Equals(value, "classic", StringComparison.OrdinalIgnoreCase)) return "classic";
+            if (string.Equals(value, "pixel", StringComparison.OrdinalIgnoreCase)) return "pixel";
             return "glass";
         }
+        public static string NormalizeUsageScope(string value)
+        { return string.Equals(value, "local", StringComparison.OrdinalIgnoreCase) ? "local" : "account"; }
 
         public string ConfigPath { get; private set; }
         public bool UsesFallbackPath { get; private set; }
@@ -133,6 +137,7 @@ namespace CodexToolsHost.Model
         public bool QuotaHudTopMost { get; set; }
         public string QuotaHudStyle { get; set; }
         public bool QuotaHudChartExpanded { get; set; }
+        public string UsageDisplayScope { get; set; }
         public bool UpdateChecksEnabled { get; set; }
         public int? QuotaHudX { get; set; }
         public int? QuotaHudY { get; set; }
@@ -227,6 +232,7 @@ namespace CodexToolsHost.Model
             values["quotaHudTopMost"] = QuotaHudTopMost;
             values["quotaHudStyle"] = QuotaHudStyle;
             values["quotaHudChartExpanded"] = QuotaHudChartExpanded;
+            values["usageDisplayScope"] = NormalizeUsageScope(UsageDisplayScope);
             values["updateChecksEnabled"] = UpdateChecksEnabled;
             values["quotaHudX"] = QuotaHudX;
             values["quotaHudY"] = QuotaHudY;
@@ -331,7 +337,7 @@ namespace CodexToolsHost.Model
             int? page = ReadInt(values, "defaultOledPage");
             int? ver = ReadInt(values, "configVersion");
             int loadedVersion = ver.HasValue ? ver.Value : 0;
-            if (page.HasValue && page.Value >= 0 && page.Value <= 3)
+            if (page.HasValue && page.Value >= 0 && page.Value <= 4)
             {
                 /* v1: 0=状态 1=额度 2=动画 3=关于；v2/v3: 0=状态 1=动画 2=PC 3=自动。 */
                 if (loadedVersion < 2)
@@ -346,7 +352,7 @@ namespace CodexToolsHost.Model
                     else if (page.Value <= 2) DefaultOledPage = 1;
                     else DefaultOledPage = 2;
                 }
-                else DefaultOledPage = Math.Min(2, page.Value);
+                else DefaultOledPage = page.Value == 4 ? 4 : Math.Min(2, page.Value);
             }
             NeedsSave = loadedVersion != 11;
             ConfigVersion = 11;
@@ -374,6 +380,7 @@ namespace CodexToolsHost.Model
             if (hudTopMost.HasValue) QuotaHudTopMost = hudTopMost.Value;
             QuotaHudStyle = NormalizeQuotaHudStyle(ReadString(values, "quotaHudStyle"));
             QuotaHudChartExpanded = ReadBool(values, "quotaHudChartExpanded") ?? true;
+            UsageDisplayScope = NormalizeUsageScope(ReadString(values, "usageDisplayScope"));
             UpdateChecksEnabled = ReadBool(values, "updateChecksEnabled") ?? true;
             QuotaHudX = ReadInt(values, "quotaHudX");
             QuotaHudY = ReadInt(values, "quotaHudY");

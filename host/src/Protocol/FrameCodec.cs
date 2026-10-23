@@ -22,6 +22,8 @@ namespace CodexToolsHost.Protocol
         public const byte MsgRgbStatus = 0x0A; /* 6 种状态颜色，每种 3 字节 RGB，共 18 字节 */
         public const byte MsgPcMetrics = 0x0B; /* PC 监控快照：CPU/内存/温度 */
         public const byte MsgEnterDfu = 0x0C;
+        public const byte MsgOledUsage = 0x0D;
+        public const byte MsgAccountUsage = 0x0E;
 
         public const byte MsgInfo = 0x81;
         public const byte MsgEvtButton = 0x82;

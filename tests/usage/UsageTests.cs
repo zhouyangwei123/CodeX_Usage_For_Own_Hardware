@@ -8,6 +8,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using CodexToolsHost.Usage;
 using CodexToolsHost.UI;
+using CodexToolsHost.Model;
 
 internal static class UsageTests
 {
@@ -202,13 +203,15 @@ internal static class UsageTests
             using (LocalUsageService service = new LocalUsageService(Home))
             {
                 service.RefreshAsync().Wait();
-                using (UsagePanel panel = new UsagePanel(service))
+                var config = AppConfig.CreateDefault(); config.UsageDisplayScope = "local";
+                using (UsagePanel panel = new UsagePanel(service, null, config))
                 {
                     panel.Size = new Size(900, 650); panel.CreateControl(); panel.PerformLayout();
+                    panel.Controls.Find("usagePeriod", true).OfType<ComboBox>().Single().SelectedIndex = 3;
                     using (Bitmap bitmap = new Bitmap(panel.Width, panel.Height))
                     { panel.DrawToBitmap(bitmap, panel.ClientRectangle); bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "usage-panel.png")); }
                     DataGridView grid = panel.Controls.Find("usageGrid", true).OfType<DataGridView>().Single();
-                    Check(grid.Rows.Count == 1 && grid.Columns.Count == 6, "table renders synthetic stats");
+                    Check(grid.Rows.Count == 1 && grid.Columns.Count == 6 && Convert.ToInt64(grid.Rows[0].Cells[5].Value) == 10400, "table renders synthetic stats");
                 }
             }
         });

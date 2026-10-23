@@ -1,11 +1,12 @@
 param(
  [Parameter(Mandatory=$true)][string]$CubeIde,
  [Parameter(Mandatory=$true)][string]$ArmBin,
- [string]$Python = 'python'
+ [string]$Python = 'python',
+ [string]$OutputDirectory
 )
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$out = Join-Path $repo 'artifacts\usb-update'
+$out = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $repo 'artifacts\usb-update' }
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 $fw = Join-Path $repo 'firmware\STM32G474'
 $buildLog = Join-Path $out 'application-build.log'
