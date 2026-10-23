@@ -114,6 +114,8 @@ internal static class OledUsageTests
         foreach(var pair in new[]{new[]{0UL,1UL},new[]{1000UL,1000UL},new[]{1001UL,2000UL},new[]{20001UL,50000UL}})Check(OledUsageProjector.NiceCeiling(pair[0])==pair[1],"Nice ceiling "+pair[0]);
         Check(AppConfig.CreateDefault().UsageDisplayScope=="local"&&AppConfig.CreateDefault().DefaultOledPage==4,"Local usage and local OLED page are defaults");
         Check(AppConfig.NormalizeQuotaHudStyle("pixel")=="pixel","Pixel skin config recognized");
+        Check(AppConfig.CreateDefault().QuotaHudStyle=="pixel"&&AppConfig.NormalizeQuotaHudStyle(null)=="pixel","Pixel is the default skin");
+        Check(AppConfig.NormalizeQuotaHudStyle("glass")=="glass","Explicit glass preference is preserved");
         Check(AppConfig.NormalizeUsageScope(null)=="local"&&AppConfig.NormalizeUsageScope("account")=="account","Scope normalization preserves account selection");
         string[] invalid={"{\"dailyUsageBuckets\":[{\"startDate\":\"bad\",\"tokens\":1}]}","{\"summary\":{\"lifetimeTokens\":-1}}","{\"dailyUsageBuckets\":[{\"startDate\":\"2026-01-01\",\"tokens\":1.5}]}"};
         foreach(string json in invalid){bool rejected=false;try{Account(json,now);}catch(InvalidDataException){rejected=true;}Check(rejected,"Invalid account count/date rejected");}

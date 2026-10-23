@@ -81,7 +81,7 @@ namespace CodexToolsHost.Model
             QuotaHudScalePercent = 75;
             QuotaHudOpacity = 0.90d;
             QuotaHudTopMost = true;
-            QuotaHudStyle = "glass";
+            QuotaHudStyle = "pixel";
             QuotaHudChartExpanded = true;
             UsageDisplayScope = "local";
             UpdateChecksEnabled = true;
@@ -103,10 +103,11 @@ namespace CodexToolsHost.Model
 
         public static string NormalizeQuotaHudStyle(string value)
         {
+            if (string.Equals(value, "glass", StringComparison.OrdinalIgnoreCase)) return "glass";
             if (string.Equals(value, "minimal", StringComparison.OrdinalIgnoreCase)) return "minimal";
             if (string.Equals(value, "classic", StringComparison.OrdinalIgnoreCase)) return "classic";
             if (string.Equals(value, "pixel", StringComparison.OrdinalIgnoreCase)) return "pixel";
-            return "glass";
+            return "pixel";
         }
         public static string NormalizeUsageScope(string value)
         { return string.Equals(value, "account", StringComparison.OrdinalIgnoreCase) ? "account" : "local"; }
