@@ -59,10 +59,11 @@
 #define OLED_REFRESH_MONITOR_MS 40u
 #define OLED_REFRESH_STATUS_MS  500u
 #define OLED_REFRESH_ACTIVITY_MS 100u
+#define OLED_REFRESH_USAGE_MS  1000u
 #define OLED_AUTO_INTERVAL_MS  5000u
 #define HOST_LINK_TIMEOUT_MS  5000  /* 超过该时间未收到主机 STATUS 视为离线 */
 #define FW_VERSION_MAJOR      0
-#define FW_VERSION_MINOR      10
+#define FW_VERSION_MINOR      11
 #define FW_MODEL_STRING       "CodeX Tools"
 
 #endif /* __APP_CFG_H */

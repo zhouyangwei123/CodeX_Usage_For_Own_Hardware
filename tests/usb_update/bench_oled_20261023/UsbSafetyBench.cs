@@ -19,6 +19,7 @@ class UsbSafetyBench
  [STAThread] static int Main(string[] args)
  {
   string cli=args[0], package=args[1], output=Path.GetFullPath(args[2]), port=args[3], expected=args[4];
+  string initialVersion=args.Length>5?args[5]:"0.9";
   Directory.CreateDirectory(output);
   var record=new Dictionary<string,object>();record["startedUtc"]=DateTime.UtcNow.ToString("o");
   record["hostVersion"]=typeof(SerialLink).Assembly.GetName().Version.ToString();
@@ -34,7 +35,7 @@ class UsbSafetyBench
   var ready=new ManualResetEvent(false);string version=null;
   var link=new SerialLink(port);
   typeof(BridgeService).GetField("_link",Fields).SetValue(bridge,link);
-  typeof(BridgeService).GetField("_firmwareMinor",Fields).SetValue(bridge,9);
+  typeof(BridgeService).GetField("_firmwareMinor",Fields).SetValue(bridge,Version.Parse(initialVersion).Minor);
   link.Connected+=delegate{link.Send(FrameCodec.MsgCfgReq,new byte[0]);};
   link.FrameReceived+=delegate(byte type,byte[] data){if(type==FrameCodec.MsgInfo&&data.Length>=2){version=data[0]+"."+data[1];ready.Set();}};
   link.StatusChanged+=Console.WriteLine;
@@ -69,7 +70,7 @@ class UsbSafetyBench
   try {
    if(UsbDeviceIdentity.SerialForPort(port)!=expected)throw new IOException("CDC identity mismatch");
    record["cdcIdentityMatched"]=true;link.Start();
-   if(!ready.WaitOne(10000)||version!="0.9")throw new IOException("Expected firmware INFO missing");
+   if(!ready.WaitOne(10000)||version!=initialVersion)throw new IOException("Expected firmware INFO missing");
    record["initialFirmware"]=version;
    if(!bridge.TryBeginFirmwareUpdate())throw new IOException("Update already active");
    string[] applications=Directory.GetFiles(package,"Application-*.bin");

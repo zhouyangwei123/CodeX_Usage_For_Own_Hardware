@@ -29,6 +29,7 @@ typedef enum
 } oled_dma_mode_t;
 
 static uint8_t oled_tx_fb[OLED_WIDTH * OLED_HEIGHT / 8];
+static uint8_t oled_tx_fb_valid;
 static uint8_t oled_dma_cmd_buf[3];
 static uint8_t oled_dma_runtime;
 static uint8_t oled_dma_failed;
@@ -902,6 +903,7 @@ static HAL_StatusTypeDef oled_dma_submit_next(void)
 static void oled_dma_begin(void)
 {
   memcpy(oled_tx_fb, fb, sizeof(fb));
+  oled_tx_fb_valid = 1u;
   oled_dma_mode = (oled_driver == 2u) ? OLED_DMA_SH1106 : OLED_DMA_SSD1306;
   oled_dma_cmd_index = 0u;
   oled_dma_page = 0u;
@@ -968,6 +970,7 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
   oled_dma_inflight = 0u;
   oled_dma_pending = 0u;
   oled_dma_kick = 0u;
+  oled_tx_fb_valid = 0u;
   if (oled_dma_runtime)
   {
     oled_dma_failed = 1u;
@@ -977,6 +980,7 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
 
 void oled_init(void)
 {
+  oled_tx_fb_valid = 0u;
   oled_dma_runtime = 0u;
   oled_dma_failed = 0u;
   oled_dma_active = 0u;
@@ -1194,6 +1198,19 @@ static void oled_flush_blocking(void)
     oled_write_cmd(0x07);
     oled_write_data(fb, sizeof(fb));
   }
+  oled_tx_fb_valid = oled_ok;
+  if (oled_tx_fb_valid) memcpy(oled_tx_fb, fb, sizeof(fb));
+}
+
+void oled_flush_if_changed(void)
+{
+  if (oled_tx_fb_valid && memcmp(fb, oled_tx_fb, sizeof(fb)) == 0)
+  {
+    /* A newer frame may have reverted while the previous DMA is in flight. */
+    if (oled_dma_active) oled_dma_pending = 0u;
+    return;
+  }
+  oled_flush();
 }
 
 void oled_flush(void)

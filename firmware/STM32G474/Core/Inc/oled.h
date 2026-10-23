@@ -51,6 +51,7 @@ void oled_draw_string(uint8_t x, uint8_t y, const char *str, uint8_t color);
 void oled_draw_progress(uint8_t x, uint8_t y, uint8_t w, uint8_t h,
                         uint8_t percent, uint8_t color);
 void oled_flush(void);
+void oled_flush_if_changed(void);
 void oled_process(void);
 void oled_noise_diag_start(uint32_t now_ms);
 void oled_noise_diag_process(uint32_t now_ms);

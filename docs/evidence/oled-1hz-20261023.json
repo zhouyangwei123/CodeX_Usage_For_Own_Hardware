@@ -1,0 +1,89 @@
+{
+  "date": "2026-10-23",
+  "firmwareVersion": "0.11",
+  "hostVersion": "0.6.2.0",
+  "purpose": "Test whether limiting usage page writes to 1Hz reduces the reported OLED noise.",
+  "before": {
+    "runningPeriodicHz": 10,
+    "idlePeriodicHz": 2,
+    "dirtyEventsCouldBypassPeriod": true
+  },
+  "after": {
+    "usagePages": [
+      0,
+      4
+    ],
+    "minimumRenderIntervalMs": 1000,
+    "identicalFramebufferWritesSkipped": true,
+    "pcAndDiagnosticTimingPreserved": true,
+    "panelInternalScanParametersChanged": false
+  },
+  "offline": {
+    "pageStateFloodScenarios": 12,
+    "rendersPer10SecondsEachScenario": 10,
+    "tickWraparoundPassed": true,
+    "pcAndDiagnosticTimingPassed": true,
+    "completeProductionDriverTestedAtHalBoundary": true,
+    "drivers": [
+      "SSD1306",
+      "SH1106"
+    ],
+    "unchanged100CallsNoWrites": true,
+    "dmaBusyPendingRevertPassed": true,
+    "blockingFallbackAndErrorReinitPassed": true,
+    "oledAssertions": 203,
+    "exactFrameComparisons": 26,
+    "demoRasterStates": 216,
+    "imageChecks": 9,
+    "updateRequestChecks": 3,
+    "updaterChecks": 55,
+    "powerShell51UnicodePassed": true
+  },
+  "build": {
+    "errors": 0,
+    "warnings": 0,
+    "applicationBytes": 47592,
+    "applicationCapacity": 57344,
+    "dataAndBssBytes": 14728,
+    "appSha256": "49e5bb056189f03d3e467fcc938cf2eaabb5b0d4812b3bd39730a6972ca5c25d",
+    "bootBytesUnchangedFrom010Delivery": true
+  },
+  "usb": {
+    "passed": true,
+    "initialFirmware": "0.10",
+    "targetFirmware": "0.11",
+    "reconnectedFirmware": "0.11",
+    "boot8192BytesUnchanged": true,
+    "optionBytesUnchanged": true,
+    "actualDfuMismatchRejectedBeforeMemoryAccess": true,
+    "trayExitDeniedWhileActualUpdateActive": true,
+    "steps": 11
+  },
+  "readbackByteIdentical": true,
+  "realUsage": {
+    "passed": true,
+    "hostVersion": "0.6.2.0",
+    "localKnown": true,
+    "accountKnown": true,
+    "localCurrentNonzero": true,
+    "localHistoryRestored": true,
+    "nonzeroCurveSentToDevice": true,
+    "localFrames": 11,
+    "accountFrames": 11,
+    "localAndAccountPagesSent": true,
+    "endedOnLocal": true,
+    "pcMetrics28Bytes": true,
+    "localSumMatches": true,
+    "firmware": "0.11",
+    "oledOnline": true,
+    "errorAcks": 0,
+    "personalValuesOrIdentityRecorded": false
+  },
+  "dailyHostRestored": true,
+  "acousticFeedback": "pending",
+  "physicalI2cTraceRecorded": false,
+  "soundPressureMeasured": false,
+  "fiveMinuteSoakRepeated": false,
+  "stableReleaseReplaced": false,
+  "personalConfigOrCredentialsIncluded": false
+}

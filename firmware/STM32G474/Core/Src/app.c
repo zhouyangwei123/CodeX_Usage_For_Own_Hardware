@@ -165,6 +165,16 @@ static uint32_t oled_refresh_interval_ms(uint8_t page)
   return OLED_REFRESH_STATUS_MS;
 }
 
+static uint8_t oled_refresh_due(uint32_t now_ms)
+{
+  /* Data messages coalesce until the next 1Hz slot; dirty is not a bypass. */
+  if (!oled_noise_manual_active() &&
+      (visible_page == OLED_PAGE_STATUS || visible_page == OLED_PAGE_LOCAL))
+    return (uint8_t)((uint32_t)(now_ms - last_oled_ms) >= OLED_REFRESH_USAGE_MS);
+  return (uint8_t)(oled_dirty ||
+      (uint32_t)(now_ms - last_oled_ms) >= oled_refresh_interval_ms(visible_page));
+}
+
 /* 整数正弦表（64 点） */
 static const int16_t sin8[64] = {
   0, 12, 25, 37, 49, 61, 72, 83, 93, 102, 110, 118, 124, 129, 134, 137,
@@ -760,7 +770,11 @@ static void oled_render(uint32_t now_ms)
   /* 按键反馈放在圆圈与网速之间的空白处。 */
   if (!noise_manual && now_ms < btn_fb_until_ms)
     oled_fill_rect(78u, 3u, 3u, 3u, 1);
-  oled_flush();
+  if (!noise_manual &&
+      (visible_page == OLED_PAGE_STATUS || visible_page == OLED_PAGE_LOCAL))
+    oled_flush_if_changed();
+  else
+    oled_flush();
   if (noise_manual) oled_noise_manual_mark_ui_submitted();
 }
 
@@ -1003,8 +1017,8 @@ void app_tick(void)
 
   update_oled_auto_page(now);
 
-  /* OLED 刷新：PC MON 25Hz；CODEX 运行 10Hz、空闲 2Hz；事件可立即刷新。 */
-  if (oled_dirty || now - last_oled_ms >= oled_refresh_interval_ms(visible_page))
+  /* 用量页最多1Hz且不重复写相同画面；PC页与噪音诊断保持原有时序。 */
+  if (oled_refresh_due(now))
   {
     last_oled_ms = now;
     oled_dirty = 0;

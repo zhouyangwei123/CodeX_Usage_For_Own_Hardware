@@ -54,6 +54,8 @@ internal static class LiveUsageBench
     static int Main(string[] args)
     {
         var result=new Dictionary<string,object>();int code=1;
+        string firmwareOption=args.FirstOrDefault(x=>x.StartsWith("--firmware=",StringComparison.Ordinal));
+        string expectedFirmware=firmwareOption==null?"0.10":firmwareOption.Substring("--firmware=".Length);
         try
         {
             if(UsbDeviceIdentity.SerialForPort("COM6")!="20553872524E")throw new IOException("Device identity mismatch");
@@ -80,7 +82,7 @@ internal static class LiveUsageBench
                     var activity=UsageActivity.Create(usage.Report,DateTimeOffset.UtcNow);
                     bool history=activity.HourTokens>0&&activity.Points.Any(x=>x.Time<DateTimeOffset.UtcNow.AddMinutes(-1)&&x.InputTokens+x.OutputTokens>0);
                     bool passed=tap.LocalKnown&&tap.AccountKnown&&tap.LocalPage&&tap.AccountPage&&tap.SumContract&&tap.PcContract&&
-                        tap.Firmware=="0.10"&&(tap.OledStatus&1)!=0&&tap.Errors==0&&tap.LocalFrames>1&&tap.AccountFrames>1;
+                        tap.Firmware==expectedFirmware&&(tap.OledStatus&1)!=0&&tap.Errors==0&&tap.LocalFrames>1&&tap.AccountFrames>1;
                     if(args.Contains("--require-local-history"))passed&=history&&tap.LocalCurveNonzero;
                     result["passed"]=passed;result["hostVersion"]=typeof(BridgeService).Assembly.GetName().Version.ToString();
                     result["localKnown"]=tap.LocalKnown;result["accountKnown"]=tap.AccountKnown;result["localCurrentNonzero"]=tap.LocalNonzero;
