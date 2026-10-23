@@ -11,6 +11,8 @@ namespace CodexToolsHost.UI
     // Font bytes are copied from oled.c / usage_oled.c; cross-language tests check them.
     internal static class OledPixelRenderer
     {
+        internal const int FramePadding = 4;
+        internal static Size LogicalSize(bool expanded) { return new Size(136, expanded ? 72 : 36); }
         private const string FontBytes = "AAAAAAAAAF8AAAAHAAcAFH8UfxQkKn8qEiMTCGRiNklVIlAABQMAAAAcIkEAAEEiHAAUCD4IFAgIPggIAFAwAAAICAgICABgYAAAIBAIBAI+UUlFPgBCf0AAQmFRSUYhQUVLMRgUEn8QJ0VFRTk8SklJMAFxCQUDNklJSTYGSUkpHgA2NgAAAFY2AAAIFCJBABQUFBQUAEEiFAgCAVEJBjJJeUE+fhEREX5/SUlJNj5BQUEif0FBIhx/SUlJQX8JCQkBPkFJSXp/CAgIfwBBf0EAIEBBPwF/CBQiQX9AQEBAfwIMAn9/BAgQfz5BQUE+fwkJCQY+QVEhXn8JGSlGRklJSTEBAX8BAT9AQEA/HyBAIB8/QDhAP2MUCBRjBwhwCAdhUUlFQwB/QUEAAgQIECAAQUF/AAQCAQIEQEBAQEAAAQIEACBUVFR4f0hERDg4REREIDhEREh/OFRUVBgIfgkBAgxSUlI+fwgEBHgARH1AACBARD0AfxAoRAAAQX9AAHwEGAR4fAgEBHg4REREOHwUFBQICBQUGHx8CAQECEhUVFQgBD9EQCA8QEAgfBwgQCAcPEAwQDxEKBAoRAxQUFA8RGRUTEQACDZBAAAAfwAAAEE2CAAIBAgQCD5BQUE+";
         private const string SmallBytes = "HxEfEh8QHRUXFRUfBwQfFxUdHxUdAQEfHxUfFxUfHwoRHwYfHxEdABAABAQEAh8CCB8IAAAAHgUeHwUHER8RGAQDHgIeHwQYDBIfHxAQAR8BHwUBHwIfHxURABcA";
         private static readonly byte[] Font = Convert.FromBase64String(FontBytes);
@@ -56,13 +58,13 @@ namespace CodexToolsHost.UI
             var s = new Surface();
             bool quota = frame.Has(OledUsageFrame.QuotaKnown) && !frame.Has(OledUsageFrame.QuotaStale);
             bool usage = frame.Has(OledUsageFrame.UsageKnown) && !frame.Has(OledUsageFrame.UsageStale);
-            s.Text(2, 0, quota ? "7D " + frame.Remaining + "%" : "7D --");
+            s.Text(2, 2, quota ? "7D " + frame.Remaining + "%" : "7D --");
             uint seconds = frame.ResetSeconds;
             string reset = !quota || !frame.Has(OledUsageFrame.ResetKnown) ? "--" : seconds >= 8640000 ? ">99d" : seconds >= 86400
                 ? seconds / 86400 + "d" + (seconds % 86400 / 3600).ToString("00") + "h" : seconds >= 3600
                 ? seconds / 3600 + "h" + (seconds % 3600 / 60).ToString("00") + "m" : seconds / 60 + "m";
-            s.Text(46, 0, reset); s.Text(82, 4, upload, true); s.Text(105, 4, download, true);
-            if (usage && frame.Has(OledUsageFrame.Partial)) s.Text(77, 0, "!", true);
+            s.Text(46, 2, reset); s.Text(82, 4, upload, true); s.Text(105, 4, download, true);
+            if (usage && frame.Has(OledUsageFrame.Partial)) s.Text(77, 2, "!", true);
             s.Line(2, 10, 125, 10); s.Line(2, 13, 125, 13); s.Line(2, 10, 2, 13); s.Line(125, 10, 125, 13);
             if (quota) s.Rect(3, 11, (frame.Remaining * 122 + 50) / 100, 2);
             if (usage)
@@ -90,18 +92,34 @@ namespace CodexToolsHost.UI
         {
             bool network = pc != null && pc.NetworkSpeedAvailable && !pc.IsStale && DateTimeOffset.UtcNow - pc.SampledAtUtc <= TimeSpan.FromSeconds(10);
             byte[] bits = RenderBits(frame, Network('U', pc == null ? 0 : pc.NetworkUploadKiBPerSecond, network), Network('D', pc == null ? 0 : pc.NetworkDownloadKiBPerSecond, network));
-            using (var source = new Bitmap(128, expanded ? 64 : 28, PixelFormat.Format32bppPArgb))
+            Size logical = LogicalSize(expanded);
+            using (var source = new Bitmap(logical.Width, logical.Height, PixelFormat.Format32bppPArgb))
             {
-                for (int y = 0; y < source.Height; y++) for (int x = 0; x < 128; x++)
+                DrawBezel(source);
+                for (int y = 0; y < (expanded ? 64 : 28); y++) for (int x = 0; x < 128; x++)
                 {
                     int originalY = !expanded && y >= 20 ? y + 36 : y;
                     bool lit = (expanded || y < 14 || y >= 20) && (bits[x + originalY / 8 * 128] & (1 << (originalY % 8))) != 0;
-                    source.SetPixel(x, y, lit ? Color.White : Color.Black);
+                    source.SetPixel(x + FramePadding, y + FramePadding, lit ? Color.White : Color.Black);
                 }
                 var result = new Bitmap(size.Width, size.Height, PixelFormat.Format32bppPArgb);
                 using (Graphics g = Graphics.FromImage(result))
-                { g.Clear(Color.Black); g.InterpolationMode = InterpolationMode.NearestNeighbor; g.PixelOffsetMode = PixelOffsetMode.Half; g.DrawImage(source, new Rectangle(Point.Empty, size)); }
+                { g.Clear(Color.Transparent); g.InterpolationMode = InterpolationMode.NearestNeighbor; g.PixelOffsetMode = PixelOffsetMode.Half; g.DrawImage(source, new Rectangle(Point.Empty, size)); }
                 return result;
+            }
+        }
+        private static void DrawBezel(Bitmap image)
+        {
+            Color face = Color.FromArgb(27,36,43), rim = Color.FromArgb(111,130,140), tile = Color.FromArgb(64,81,90);
+            int w = image.Width, h = image.Height;
+            for (int y = 0; y < h; y++) for (int x = 0; x < w; x++)
+            {
+                int edgeX = Math.Min(x, w - 1 - x), edgeY = Math.Min(y, h - 1 - y);
+                if (edgeX + edgeY < 3) continue;
+                Color color = face;
+                if (edgeX == 0 || edgeY == 0 || edgeX + edgeY == 3) color = rim;
+                else if ((edgeY == 1 && x % 6 < 2) || (edgeX == 1 && y % 6 < 2)) color = tile;
+                image.SetPixel(x, y, color);
             }
         }
     }

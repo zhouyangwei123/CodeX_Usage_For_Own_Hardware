@@ -74,9 +74,9 @@ static uint32_t last_oled_ms;
 static uint32_t last_oled_retry_ms;
 static volatile uint8_t oled_dirty = 1;
 static uint32_t last_rgb_ms;
-static uint8_t oled_page = OLED_PAGE_STATUS;
-static uint8_t visible_page = OLED_PAGE_STATUS;
-static uint8_t auto_page = OLED_PAGE_STATUS;
+static uint8_t oled_page = OLED_PAGE_LOCAL;
+static uint8_t visible_page = OLED_PAGE_LOCAL;
+static uint8_t auto_page = OLED_PAGE_LOCAL;
 static uint32_t auto_page_started_ms;
 static uint32_t last_oled_page_change_ms;
 static uint8_t oled_page_change_valid;
@@ -129,7 +129,7 @@ static void set_oled_mode(uint8_t page, uint8_t param, uint32_t now_ms)
   oled_page = page;
   if (oled_page == OLED_PAGE_AUTO)
   {
-    auto_page = OLED_PAGE_STATUS;
+    auto_page = OLED_PAGE_LOCAL;
     auto_page_started_ms = now_ms;
     set_visible_page(auto_page, now_ms);
   }
@@ -142,7 +142,7 @@ static void update_oled_auto_page(uint32_t now_ms)
   if (oled_page != OLED_PAGE_AUTO) return;
   if ((uint32_t)(now_ms - auto_page_started_ms) < OLED_AUTO_INTERVAL_MS) return;
   auto_page_started_ms = now_ms;
-  auto_page = (uint8_t)((auto_page + 1u) % 2u);
+  auto_page = auto_page == OLED_PAGE_LOCAL ? OLED_PAGE_MONITOR : OLED_PAGE_LOCAL;
   set_visible_page(auto_page, now_ms);
 }
 
@@ -885,9 +885,9 @@ void app_init(void)
   boot_ms = HAL_GetTick();
   memset(usage_data, 0, sizeof(usage_data));
   usage_data[1].view = 1;
-  oled_page = OLED_PAGE_STATUS;
-  visible_page = OLED_PAGE_STATUS;
-  auto_page = OLED_PAGE_STATUS;
+  oled_page = OLED_PAGE_LOCAL;
+  visible_page = OLED_PAGE_LOCAL;
+  auto_page = OLED_PAGE_LOCAL;
   auto_page_started_ms = boot_ms;
   memset(&host, 0, sizeof(host));
   memset(marquee, 0, sizeof(marquee));

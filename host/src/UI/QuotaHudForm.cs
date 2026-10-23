@@ -629,15 +629,15 @@ namespace CodexToolsHost.UI
 
         private Size CanonicalWindowSize()
         {
-            if (IsPixel) return new Size(512, (_config.QuotaHudChartExpanded ? 64 : 28) * 4);
+            if (IsPixel) { Size logical = OledPixelRenderer.LogicalSize(_config.QuotaHudChartExpanded); return new Size(logical.Width * 4, logical.Height * 4); }
             if (_usage != null) return QuotaHudRenderer.ActivityWindowSize(_config.QuotaHudChartExpanded);
             return new Size(_renderer.PreferredSize.Width,
                 _renderer.PreferredSize.Height + ApiGap + ApiHeight);
         }
         private Rectangle RefreshHitClient()
-        { return ScaleToClient(IsPixel ? new Rectangle(0, 0, 304, 56) : _renderer.RefreshHitBounds(QuotaBounds())); }
+        { return ScaleToClient(IsPixel ? new Rectangle(16, 16, 304, 56) : _renderer.RefreshHitBounds(QuotaBounds())); }
         private Rectangle ToggleHitClient()
-        { return ScaleToClient(IsPixel ? new Rectangle(0, (_config.QuotaHudChartExpanded ? 56 : 20) * 4, 512, 32) : QuotaHudRenderer.ActivityToggleBounds()); }
+        { return ScaleToClient(IsPixel ? new Rectangle(16, (4 + (_config.QuotaHudChartExpanded ? 56 : 20)) * 4, 512, 32) : QuotaHudRenderer.ActivityToggleBounds()); }
 
         private Rectangle ScaleToClient(Rectangle canonical)
         {

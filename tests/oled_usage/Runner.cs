@@ -44,6 +44,7 @@ internal static class OledUsageTests
         using(var process=Process.Start(start))
         { if(!process.WaitForExit(10000)){process.Kill();throw new Exception("Native renderer timeout");}Check(process.ExitCode==0,"Native renderer accepted "+name+": "+process.StandardError.ReadToEnd()); }
         Check(expected.SequenceEqual(File.ReadAllBytes(stem+".native-bits")),"Host/firmware pixel equality "+name);
+        Check(expected.Take(128).All(value=>(value&3)==0),"Two blank top rows "+name);
         Check(frame.Encode().Length<=FrameCodec.MaxPayload,"Frame size "+name);
         Check(frame.DetailText().Length<=21,"Footer fits "+name);
         Check(frame.ApiText().StartsWith("API ",StringComparison.Ordinal),"API spacing "+name);
@@ -52,7 +53,7 @@ internal static class OledUsageTests
     static Bitmap Render(OledUsageFrame frame,bool expanded)
     {
         var pc=new PcMetricsSnapshot { SampledAtUtc=DateTimeOffset.UtcNow,NetworkSpeedAvailable=true,NetworkUploadKiBPerSecond=80,NetworkDownloadKiBPerSecond=1234 };
-        return (Bitmap)Pixel.GetMethod("Render",Static).Invoke(null,new object[]{new Size(384,expanded?192:84),frame,pc,expanded});
+        return (Bitmap)Pixel.GetMethod("Render",Static).Invoke(null,new object[]{new Size(408,expanded?216:108),frame,pc,expanded});
     }
     [STAThread] static int Main(string[] args)
     {
@@ -89,9 +90,10 @@ internal static class OledUsageTests
         using(var image=Render(accountFrame,false))
         {
             image.Save(Path.Combine(output,"pixel-collapsed.png"),ImageFormat.Png);
-            Check(image.Height==84,"Collapsed skin is 28 logical rows");
-            bool empty=true;for(int y=42;y<60;y++)for(int x=0;x<image.Width;x++)empty&=image.GetPixel(x,y).ToArgb()==Color.Black.ToArgb();
+            Check(image.Height==108,"Collapsed skin retains 28 content rows plus bezel");
+            bool empty=true;for(int y=54;y<72;y++)for(int x=12;x<396;x++)empty&=image.GetPixel(x,y).ToArgb()==Color.Black.ToArgb();
             Check(empty,"Collapsed gap has no chart fragments");
+            Check(image.GetPixel(0,0).A==0&&image.GetPixel(60,0).A==255,"Stepped corners and solid rim");
         }
         foreach(ulong top in new ulong[]{1,2,5,10,50,1000,2000,5000,100000,1000000,5000000000,10000000000000000000UL})
         {
@@ -110,9 +112,9 @@ internal static class OledUsageTests
         var fiveHourOnly=new QuotaSnapshot(50,null,now.AddHours(1),null,now,false,300,null,"");
         Check(!projector.Create(true,fiveHourOnly,local,account,0,false,false,false,now).Has(OledUsageFrame.QuotaKnown),"5h is not relabeled as 7D");
         foreach(var pair in new[]{new[]{0UL,1UL},new[]{1000UL,1000UL},new[]{1001UL,2000UL},new[]{20001UL,50000UL}})Check(OledUsageProjector.NiceCeiling(pair[0])==pair[1],"Nice ceiling "+pair[0]);
-        Check(AppConfig.CreateDefault().UsageDisplayScope=="account","Default scope is whole account");
+        Check(AppConfig.CreateDefault().UsageDisplayScope=="local"&&AppConfig.CreateDefault().DefaultOledPage==4,"Local usage and local OLED page are defaults");
         Check(AppConfig.NormalizeQuotaHudStyle("pixel")=="pixel","Pixel skin config recognized");
-        Check(AppConfig.NormalizeUsageScope(null)=="account"&&AppConfig.NormalizeUsageScope("local")=="local","Scope normalization");
+        Check(AppConfig.NormalizeUsageScope(null)=="local"&&AppConfig.NormalizeUsageScope("account")=="account","Scope normalization preserves account selection");
         string[] invalid={"{\"dailyUsageBuckets\":[{\"startDate\":\"bad\",\"tokens\":1}]}","{\"summary\":{\"lifetimeTokens\":-1}}","{\"dailyUsageBuckets\":[{\"startDate\":\"2026-01-01\",\"tokens\":1.5}]}"};
         foreach(string json in invalid){bool rejected=false;try{Account(json,now);}catch(InvalidDataException){rejected=true;}Check(rejected,"Invalid account count/date rejected");}
         Check(Account("{\"summary\":null,\"dailyUsageBuckets\":null}",now).Days.Count==0,"Nullable account metrics remain unavailable");
@@ -171,7 +173,7 @@ internal static class OledUsageTests
     {
         string home=Path.Combine(output,"empty-local");Directory.CreateDirectory(Path.Combine(home,"sessions"));
         string settings=Path.Combine(output,"test-settings");Directory.CreateDirectory(settings);
-        var config=AppConfig.Load(settings,settings);config.QuotaHudStyle="pixel";
+        var config=AppConfig.Load(settings,settings);config.QuotaHudStyle="pixel";config.UsageDisplayScope="local";
         var source=new Source{AccountUsage=account,Quota=quota};
         var constructor=typeof(BridgeService).GetConstructors(Instance).Single(c=>c.GetParameters().Length==4);
         using(var service=new LocalUsageService(home))
@@ -185,7 +187,8 @@ internal static class OledUsageTests
                 window.Controls.Add(panel);window.Show();Application.DoEvents();panel.PerformLayout();
                 var selector=panel.Controls.Find("usageSource",true).OfType<ComboBox>().Single();
                 var grid=panel.Controls.Find("usageGrid",true).OfType<DataGridView>().Single();
-                Check(selector.SelectedIndex==0&&!grid.Columns[2].Visible,"Usage panel defaults to account without false splits");
+                Check(selector.SelectedIndex==1&&grid.Columns[2].Visible,"Usage panel defaults to local");
+                selector.SelectedIndex=0;Check(config.UsageDisplayScope=="account"&&!grid.Columns[2].Visible,"Account source is selectable without false splits");
                 Check(selector.Text=="整个账号 · 服务端","Account source is visibly identified");
                 selector.SelectedIndex=1;Check(config.UsageDisplayScope=="local"&&grid.Columns[2].Visible,"Local source can be selected");
                 selector.SelectedIndex=0;Check(config.UsageDisplayScope=="account","Account source can be restored");
@@ -195,9 +198,9 @@ internal static class OledUsageTests
             using(var hud=new QuotaHudForm(config,source,new FakeDeepSeekSource(),delegate{},bridge,service))
             {
                 using(var frame=(Bitmap)typeof(QuotaHudForm).GetMethod("RenderFrame",Instance).Invoke(hud,null))
-                {Check(frame.Width==384&&frame.Height==192,"75 percent pixel skin is exactly 3x OLED");frame.Save(Path.Combine(output,"pixel-hud-form.png"));}
-                Check(hud.ToggleChart()&&hud.ClientSize==new Size(384,84),"Pixel skin folds to footer without losing scale");
-                Check(hud.ToggleChart()&&hud.ClientSize==new Size(384,192),"Pixel skin expands back to 35-pixel curve");
+                {Check(frame.Width==408&&frame.Height==216,"75 percent pixel skin keeps content at 3x with bezel");frame.Save(Path.Combine(output,"pixel-hud-form.png"));}
+                Check(hud.ToggleChart()&&hud.ClientSize==new Size(408,108),"Pixel skin folds to footer without losing scale");
+                Check(hud.ToggleChart()&&hud.ClientSize==new Size(408,216),"Pixel skin expands back to 35-pixel curve");
             }
             Type renderer=typeof(AppConfig).Assembly.GetType("CodexToolsHost.UI.QuotaHudRenderer");
             using(var instance=(IDisposable)Activator.CreateInstance(renderer,true))

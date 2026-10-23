@@ -101,7 +101,7 @@ void usage_oled_render(const usage_oled_t *data, uint8_t fresh,
   oled_clear(0);
   if (quota) snprintf(buf, sizeof(buf), "7D %u%%", data->remaining);
   else snprintf(buf, sizeof(buf), "7D --");
-  oled_draw_string(2, 0, buf, 1);
+  oled_draw_string(2, 2, buf, 1);
   if (quota && (data->flags & USAGE_RESET_KNOWN))
   {
     uint32_t seconds = data->reset_seconds > age_seconds ? data->reset_seconds-age_seconds : 0;
@@ -111,9 +111,9 @@ void usage_oled_render(const usage_oled_t *data, uint8_t fresh,
     else snprintf(buf, sizeof(buf), "%um", (unsigned)(seconds/60));
   }
   else snprintf(buf, sizeof(buf), "--");
-  oled_draw_string(46, 0, buf, 1);
+  oled_draw_string(46, 2, buf, 1);
   usage_oled_compact(82, 4, upload); usage_oled_compact(105, 4, download);
-  if (usage && (data->flags & USAGE_PARTIAL)) usage_oled_compact(77, 0, "!");
+  if (usage && (data->flags & USAGE_PARTIAL)) usage_oled_compact(77, 2, "!");
   oled_draw_rect(2, 10, 124, 4, 1);
   if (quota) oled_fill_rect(3, 11, (uint8_t)((data->remaining*122u+50u)/100u), 2, 1);
   if (usage)

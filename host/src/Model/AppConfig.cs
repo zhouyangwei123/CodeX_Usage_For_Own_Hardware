@@ -70,7 +70,7 @@ namespace CodexToolsHost.Model
             OpenCodeGoApiKey = "";
             OpenCodeGoRefreshSeconds = 300;
             QuotaDisplaySource = "deepseek";
-            DefaultOledPage = 2;
+            DefaultOledPage = 4;
             OledAddress = 0;      /* 0=自动, 0x3C, 0x3D */
             OledDriver = 0;       /* 0=自动, 1=SSD1306, 2=SH1106 */
             Rgb = new RgbSettings();
@@ -83,7 +83,7 @@ namespace CodexToolsHost.Model
             QuotaHudTopMost = true;
             QuotaHudStyle = "glass";
             QuotaHudChartExpanded = true;
-            UsageDisplayScope = "account";
+            UsageDisplayScope = "local";
             UpdateChecksEnabled = true;
             QuotaHudX = null;
             QuotaHudY = null;
@@ -109,7 +109,7 @@ namespace CodexToolsHost.Model
             return "glass";
         }
         public static string NormalizeUsageScope(string value)
-        { return string.Equals(value, "local", StringComparison.OrdinalIgnoreCase) ? "local" : "account"; }
+        { return string.Equals(value, "account", StringComparison.OrdinalIgnoreCase) ? "account" : "local"; }
 
         public string ConfigPath { get; private set; }
         public bool UsesFallbackPath { get; private set; }

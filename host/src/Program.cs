@@ -244,7 +244,7 @@ namespace CodexToolsHost
                     && defaults.CodexRefreshSeconds == 30
                     && defaults.DeepSeekRefreshSeconds == 300
                     && defaults.ApiBalanceProvider == "deepseek"
-                    && defaults.DefaultOledPage == 2
+                    && defaults.DefaultOledPage == 4
                     && defaults.Rgb.Mode == "status"
                     && defaults.Rgb.Count == 3
                     && defaults.Rgb.Brightness == 60

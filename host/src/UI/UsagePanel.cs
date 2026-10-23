@@ -240,7 +240,7 @@ namespace CodexToolsHost.UI
             grid.Rows.Clear();
             foreach (AccountUsageDay day in visibleAccountDays) grid.Rows.Add(day.Date.ToString("yyyy-MM-dd"), "", null, null, null, day.Tokens);
             status.Text = snapshot.Status + (snapshot.ObservedAt == DateTimeOffset.MinValue ? "" : " · 查询 " + snapshot.ObservedAt.ToLocalTime().ToString("HH:mm:ss")) + (snapshot.IsStale ? " · 数据不可用/已过期" : "");
-            coverage.Text = "默认显示整个账号的服务端统计；本机可在来源中切换。服务端不提供此处的输入/缓存/输出分项，尚未返回的日期不按0处理。累计量不等于下表已返回日期的简单合计，跨设备覆盖范围和汇总延迟以服务端为准。";
+            coverage.Text = "此处显示整个账号的服务端统计；可在来源中切回本机。服务端不提供此处的输入/缓存/输出分项，尚未返回的日期不按0处理。累计量不等于下表已返回日期的简单合计，跨设备覆盖范围和汇总延迟以服务端为准。";
         }
         private static string ShortId(string value) { return value != null && value.Length > 18 ? value.Substring(0, 8) + "…" + value.Substring(value.Length - 6) : value; }
         private void Import()

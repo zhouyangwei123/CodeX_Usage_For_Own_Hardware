@@ -3,7 +3,7 @@ const fs=require('fs'),vm=require('vm'),path=require('path'),assert=require('ass
 const root=path.resolve(__dirname,'../..'),out=path.join(root,'artifacts/oled-usage-20261023/checks');
 fs.mkdirSync(out,{recursive:true});
 const html=fs.readFileSync(path.join(root,'demos/oled-quota-128x64.html'),'utf8');
-assert(html.includes('<option value="account" selected>'),'Whole account must be the default demo');
+assert(html.includes('<option value="local" selected>'),'Local usage must be the default demo');
 function surface(){
  const canvas={pixels:new Uint8Array(128*64)};
  const ctx={fillStyle:'#000',fillRect(x,y,w,h){assert(x>=0&&y>=0&&x+w<=128&&y+h<=64,'Rectangle outside screen');for(let py=y;py<y+h;py++)for(let px=x;px<x+w;px++)canvas.pixels[py*128+px]=this.fillStyle==='#fff'?255:0;},drawImage(other){canvas.pixels.set(other.pixels);}};
@@ -12,7 +12,7 @@ function surface(){
 const screen=surface(),actual=surface(),nodes={};
 for(const match of html.matchAll(/id="([^"]+)"/g))nodes['#'+match[1]]={value:'',checked:false,listeners:{},addEventListener(event,callback){this.listeners[event]=callback;}};
 nodes['#screen']=screen;nodes['#actual']=actual;
-nodes['#mode'].value='account';nodes['#footer-rows'].value='1';nodes['#quota'].value='78';
+nodes['#mode'].value='local';nodes['#footer-rows'].value='1';nodes['#quota'].value='78';
 const sandbox=vm.createContext({window:{},document:{querySelector(selector){assert(nodes[selector],selector);return nodes[selector];}}});
 vm.runInContext(html.match(/<script>([\s\S]*?)<\/script>/)[1],sandbox);
 for(const [input,expected] of [[0,1],[1,1],[1.1,2],[5,5],[5.1,10],[999,1000],[1000,1000],[1001,2000],[999999,1e6],[1000001,2e6]])assert.equal(vm.runInContext('niceCeiling('+input+')',sandbox),expected,'1/2/5 ceiling');
