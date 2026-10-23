@@ -1,18 +1,18 @@
 # CodeX Usage
 
-Windows 上位机与 STM32G474 桌面工具的联合仓库。当前版本：上位机 **0.6.1**、应用固件 **0.10**、启动程序 **1.0**。默认显示本机Token用量，可手动切换账号日汇总；默认使用带留白、阶梯角和马赛克边框的像素OLED浮窗。当前交付与实测范围见[0.6.1 USB与OLED验收](docs/USB_OLED-20261023.md)和[下载说明](deliverables/usb-update-0.6.1/README.md)。
+Windows 上位机与 STM32G474 桌面工具的联合仓库。当前版本：上位机 **0.6.2**、应用固件 **0.10**、启动程序 **1.0**。[正式发布与更新方法](docs/RELEASE-0.6.2.md)、[上位机下载](deliverables/host-0.6.2/README.md)。0.6.2修复分页日志遗漏，启动自动补回最近一小时真实用量；默认显示本机Token用量，可手动切换账号日汇总，新配置默认像素OLED皮肤。实测范围见[历史曲线修复](docs/USAGE_HISTORY-20261023.md)和[0.6.1 USB与OLED验收](docs/USB_OLED-20261023.md)。
 
 0.10已通过USB写入并回读校验，启动区与保护设置保持。0.5.1/App0.9历史验证保留在[安全修复与验收](docs/USB_SAFETY-20261023.md)。悬停信息窗仍已移除；账号接口的日汇总不作为本机分钟活动的替代。
 
 上一轮 [实机接手记录](docs/USB_HANDOFF-20261022.md) 与 [0.5.0整理包](deliverables/usb-update/README.md) 保留作历史依据。安全修复分支为`fix/usb-update-safety-20261023`，本轮分支为`feat/account-oled-pixel-20261023`，默认main仍是旧版。已安装Boot1.0的板无需重复首次安装；以后通过USB更新应用，按住KEY1上电可恢复。0.10保留已有串口稳定性修复。
 
-上一阶段的 [串口稳定性验证](docs/USB_STABILITY-20261022.md) 保留作问题定位依据。当前正式发布仍为 0.4.2；以下历史说明中的固件冻结和校验边界对应原版。
+上一阶段的 [串口稳定性验证](docs/USB_STABILITY-20261022.md) 保留作问题定位依据。以下历史说明中的固件冻结和校验边界对应原版。
 
 远端：https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware
 
 先阅读 [README_先看.md](README_先看.md)，开发接手阅读 [CODEX_接手说明.md](CODEX_接手说明.md)。
 
-正式发布包仍为 [0.4.2 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.4.2)，其验证结果见 [0.4.2记录](docs/VALIDATION-0.4.2.md)。本分支的 [0.5.1测试包及实测范围](deliverables/usb-update-0.5.1/README.md) 另行记录。
+正式发布包为 [0.6.2 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.6.2)。软件检查GitHub正式Release，不跟踪main或功能分支；下载与安装由用户手动完成。旧版验证保留在[0.4.2记录](docs/VALIDATION-0.4.2.md)和[0.5.1测试包及实测范围](deliverables/usb-update-0.5.1/README.md)。
 
 - `host/`：WinForms 上位机，额度监控、电脑指标、按键/编码器配置与可选集成。
 - `firmware/STM32G474/`：CubeIDE 固件工程，2026-09-24 原样导入。
