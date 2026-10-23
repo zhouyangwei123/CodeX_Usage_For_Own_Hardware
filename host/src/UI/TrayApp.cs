@@ -365,6 +365,11 @@ namespace CodexToolsHost.UI
         private void ExitApp()
         {
             if (_exiting) return;
+            if (_bridge.IsFirmwareUpdateInProgress)
+            {
+                _statusItem.Text = "固件升级进行中，请等待完成后退出";
+                return;
+            }
             _exiting = true;
             _config.QuotaHudVisible = _quotaHud != null && _quotaHud.Visible;
             DisposeHudWindows();
@@ -378,6 +383,12 @@ namespace CodexToolsHost.UI
                 _bridgeDisposed = true;
             }
             ExitThread();
+        }
+
+        protected override void ExitThreadCore()
+        {
+            if (_bridge.IsFirmwareUpdateInProgress) return;
+            base.ExitThreadCore();
         }
 
         private static Icon BuildCoffeeIcon()

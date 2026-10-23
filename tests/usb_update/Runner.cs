@@ -29,6 +29,7 @@ class Runner
   public Device(bool installed=true,bool dual=true){
    Put(Options,0,0xAAu|(dual?1u<<22:0));
    Put(Options,24,installed?(uint)((dual?3:1)<<16):127u);
+   Put(Options,32,127u); Put(Options,8,0x7FFFu);
    if(installed){Array.Copy(boot,0,Flash,0,boot.Length);Array.Copy(app,0,Flash,8192,app.Length);}
   }
   public string Run(string[] a,int timeout){
@@ -68,7 +69,7 @@ class Runner
   }
  }
  static void RunUpdate(Device d,byte[] image=null) {
-  new UsbFirmwareUpdater(d.Run,delegate(int ms){}).Update(image??app,root,delegate{},delegate(string s){});
+  new UsbFirmwareUpdater(d.Run,delegate(int ms){}).Update(image??app,root,"TEST",delegate{},delegate(string s){});
  }
  static int Main(string[] args)
  {
@@ -92,6 +93,10 @@ class Runner
   d=new Device();Check("reject invalid image before device operations",Throws(()=>RunUpdate(d,Mutate(1024)))&&d.Commands.Count==0);
   d=new Device { Listing="USB1 USB2" };Check("reject ambiguous DFU target",Throws(()=>RunUpdate(d))&&d.Writes==0);
   d=new Device { Listing="Device Index : USB1" };Check("reject absent DFU serial",Throws(()=>RunUpdate(d))&&d.Writes==0);
+  d=new Device { Listing="Device Index : USB1\nSerial number: OTHER" };
+  Check("reject another board before all memory operations",Throws(()=>RunUpdate(d))&&d.Commands.All(a=>a[0]=="-l"));
+  d=new Device();
+  Check("reject missing expected identity before device operations",Throws(()=>new UsbFirmwareUpdater(d.Run,delegate(int ms){}).Update(app,root,null,delegate{},delegate(string s){}))&&d.Commands.Count==0);
   d=new Device { Listing="No STM32 device in DFU mode connected" };Check("missing device is bounded",Throws(()=>RunUpdate(d))&&d.Commands.Count==20);
   d=new Device();d.Flash[512]^=1;Check("reject missing bootstrap",Throws(()=>RunUpdate(d))&&d.Writes==0);
   d=new Device();Put(d.Options,24,127);Check("reject unprotected bootstrap",Throws(()=>RunUpdate(d))&&d.Writes==0);
@@ -110,6 +115,17 @@ class Runner
   d=new Device(false){Size=512};Check("installer rejects other Flash geometry",Throws(()=>new StLinkFirmwareInstaller(d.Run).Install(boot,app,root))&&d.Writes==0);
   d=new Device();Check("installer will not overwrite protected boot",Throws(()=>new StLinkFirmwareInstaller(d.Run).Install(boot,app,root))&&d.Writes==0);
   d=new Device(false){FailWrite=true};Check("no protection of failed install",Throws(()=>new StLinkFirmwareInstaller(d.Run).Install(boot,app,root))&&d.Protects==0);
+  foreach(bool dual in new[]{true,false}) {
+   foreach(int page in new[]{0,dual?4:2}) {
+    d=new Device(false,dual);Put(d.Options,32,(uint)(page|(page<<16)));
+    Check("WRP1B overlap rejected before writing "+dual+" page "+page,Throws(()=>new StLinkFirmwareInstaller(d.Run).Install(boot,app,root))&&d.Writes==0&&d.Protects==0);
+   }
+   d=new Device(false,dual);Put(d.Options,8,0);Put(d.Options,16,0);
+   Check("PCROP overlap rejected before writing "+dual,Throws(()=>new StLinkFirmwareInstaller(d.Run).Install(boot,app,root))&&d.Writes==0);
+   d=new Device(false,dual);Put(d.Options,32,dual?0x001F001Fu:0x000F000Fu);
+   new StLinkFirmwareInstaller(d.Run).Install(boot,app,root);
+   Check("WRP1B outside image preserved "+dual,d.Writes==2);
+  }
   d=new Device(false){BadReadback=true};Check("no protection before successful readback",Throws(()=>new StLinkFirmwareInstaller(d.Run).Install(boot,app,root))&&d.Protects==0);
   d=new Device(false){FailProtect=true};Check("no claimed success after protection failure",Throws(()=>new StLinkFirmwareInstaller(d.Run).Install(boot,app,root))&&d.Starts==0);
   var cli=new CubeProgrammer(args[2]);

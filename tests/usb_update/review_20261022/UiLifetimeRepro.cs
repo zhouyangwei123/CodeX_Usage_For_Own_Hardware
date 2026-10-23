@@ -1,41 +1,47 @@
 using System;
 using System.Drawing;
 using System.Reflection;
+using System.Runtime.Serialization;
 using System.Windows.Forms;
+using CodexToolsHost.Core;
 using CodexToolsHost.UI;
 
-// Only a stub dependency. No BridgeService, serial port, config or process is started.
-namespace CodexToolsHost.Core
-{
-    public class BridgeService
-    {
-        public bool IsDeviceConnected { get { return false; } }
-        public bool SupportsUsbUpdate { get { return false; } }
-        public void EnterFirmwareUpdate() { throw new InvalidOperationException(); }
-        public void PauseDeviceForUpdate() { }
-        public void ResumeDeviceAfterUpdate() { }
-    }
-}
 class UiLifetimeRepro
 {
+    static readonly BindingFlags Fields=BindingFlags.Instance|BindingFlags.NonPublic;
     [STAThread] static int Main()
     {
         Application.EnableVisualStyles();
-        using (var owner = new Form { ShowInTaskbar = false, StartPosition = FormStartPosition.Manual, Location = new Point(-30000, -30000) })
+        // No service constructor or external source is started. Use the real
+        // application exit path and its real, shared update state.
+        var bridge=(BridgeService)FormatterServices.GetUninitializedObject(typeof(BridgeService));
+        var tray=(TrayApp)FormatterServices.GetUninitializedObject(typeof(TrayApp));
+        var status=new ToolStripMenuItem();
+        typeof(TrayApp).GetField("_bridge",Fields).SetValue(tray,bridge);
+        typeof(TrayApp).GetField("_statusItem",Fields).SetValue(tray,status);
+        int exited=0;
+        tray.ThreadExit+=delegate { exited++; };
+        bool acquired=bridge.TryBeginFirmwareUpdate() && !bridge.TryBeginFirmwareUpdate();
+        using(var owner=new Form {ShowInTaskbar=false,Location=new Point(-30000,-30000),StartPosition=FormStartPosition.Manual})
         {
-            var panel = new FirmwareUpdatePanel(new CodexToolsHost.Core.BridgeService(), owner);
-            owner.Controls.Add(panel);
-            owner.Show();
-            Application.DoEvents();
-            typeof(FirmwareUpdatePanel).GetField("_busy", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(panel, true);
+            var panel=new FirmwareUpdatePanel(bridge,owner);
+            owner.Controls.Add(panel);owner.Show();Application.DoEvents();
+            typeof(FirmwareUpdatePanel).GetField("_busy",Fields).SetValue(panel,true);
             owner.Close();
-            bool closeWasBlocked = !owner.IsDisposed;
-            Console.WriteLine("Normal Close while update busy was blocked: " + closeWasBlocked);
-            // TrayApp.DisposeServices takes this path before ExitThread.
-            owner.Dispose();
-            Console.WriteLine("Tray-style Dispose while update busy disposed owner: " + owner.IsDisposed);
-            Console.WriteLine("Tray-style Dispose while update busy disposed panel: " + panel.IsDisposed);
-            return closeWasBlocked && panel.IsDisposed ? 0 : 1;
+            bool closeBlocked=!owner.IsDisposed;
+            typeof(TrayApp).GetMethod("ExitApp",Fields).Invoke(tray,null);
+            tray.ExitThread();
+            bool exitBlocked=exited==0 && !(bool)typeof(TrayApp).GetField("_exiting",Fields).GetValue(tray);
+            bool keptAlive=!owner.IsDisposed && !panel.IsDisposed;
+            Console.WriteLine("One update owner only: "+acquired);
+            Console.WriteLine("Normal Close blocked: "+closeBlocked);
+            Console.WriteLine("Real tray exit and ExitThread blocked before cleanup: "+exitBlocked);
+            Console.WriteLine("Update window and panel still alive: "+keptAlive);
+            bridge.EndFirmwareUpdate();
+            Console.WriteLine("Update state released after completion: "+!bridge.IsFirmwareUpdateInProgress);
+            typeof(FirmwareUpdatePanel).GetField("_busy",Fields).SetValue(panel,false);
+            status.Dispose();
+            return acquired && closeBlocked && exitBlocked && keptAlive && !bridge.IsFirmwareUpdateInProgress ? 0:1;
         }
     }
 }

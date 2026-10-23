@@ -24,11 +24,21 @@ namespace CodexToolsHost.Updates
             return new[]{"-c","port="+ports[0],"sn="+serial.Groups[1].Value};
         }
 
-        public string Update(byte[] image, string backupRoot, Action enterDfu, Action<string> progress)
+        public static string DetectDfuSerial(string output)
+        {
+            string[] connection=UsbConnection(output);
+            if(connection==null)throw new IOException("未发现DFU设备，请按住KEY1上电并检查驱动。");
+            return connection[2].Substring(3);
+        }
+
+        public string Update(byte[] image, string backupRoot, string expectedSerial,
+                             Action enterDfu, Action<string> progress)
         {
             /* Validation precedes any device command or reset. Freeze caller bytes. */
             image=(byte[])image.Clone();
             FirmwareImage.Validate(image,false,true);
+            if(!Regex.IsMatch(expectedSerial ?? "",@"^[A-Za-z0-9]+$"))
+                throw new IOException("必须先确认待升级设备的USB序列号。");
             string directory=Path.Combine(backupRoot,DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N").Substring(0,8));
             Directory.CreateDirectory(directory);
             string staged=Path.Combine(directory,"new-application.bin");
@@ -39,7 +49,12 @@ namespace CodexToolsHost.Updates
             for(int attempt=0;attempt<20;attempt++)
             {
                 connection=UsbConnection(_run(new[]{"-l","usb"},10000));
-                if(connection!=null)break;
+                if(connection!=null)
+                {
+                    if(!string.Equals(connection[2],"sn="+expectedSerial,StringComparison.OrdinalIgnoreCase))
+                        throw new IOException("DFU设备与升级前确认的板卡不一致，已停止，未读取或改写该设备。");
+                    break;
+                }
                 _delay(500);
             }
             if(connection==null)throw new IOException("未发现DFU设备。请检查DFU驱动，或按住KEY1插入USB后重试。");

@@ -32,6 +32,7 @@ namespace CodexToolsHost.Core
         private int _oledPage;
         private int _firmwareMajor;
         private int _firmwareMinor;
+        private int _firmwareUpdateActive;
         private string _appliedSerialPort;
         private readonly object _pageSync = new object();
         private const int OledPageCooldownMs = 500;
@@ -114,12 +115,19 @@ namespace CodexToolsHost.Core
         public string DevicePort { get { return _link.PortName; } }
         public bool SupportsUsbUpdate { get { return _firmwareMajor > 0 || _firmwareMinor >= 9; } }
 
-        public void EnterFirmwareUpdate()
+        public bool IsFirmwareUpdateInProgress { get { return Volatile.Read(ref _firmwareUpdateActive)!=0; } }
+        public bool TryBeginFirmwareUpdate() { return Interlocked.CompareExchange(ref _firmwareUpdateActive,1,0)==0; }
+        public void EndFirmwareUpdate() { Interlocked.Exchange(ref _firmwareUpdateActive,0); }
+        public string FirmwareUpdateSerial { get { return UsbDeviceIdentity.SerialForPort(_link.PortName); } }
+
+        public void EnterFirmwareUpdate(string expectedSerial)
         {
             if (!_link.IsConnected || !SupportsUsbUpdate)
                 throw new InvalidOperationException("设备尚未安装USB升级入口，请先用ST-Link安装首次完整镜像。");
+            if(!string.Equals(FirmwareUpdateSerial,expectedSerial,StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("当前连接的板卡已变化，已停止进入升级模式。");
             if (!_link.Send(FrameCodec.MsgEnterDfu, Encoding.ASCII.GetBytes("NMTDFU01")))
-                throw new InvalidOperationException("设备未接受进入升级模式的请求。");
+                throw new InvalidOperationException("进入升级模式的请求发送失败。");
             Thread.Sleep(300); /* firmware resets after 200 ms */
             _link.Pause();
         }

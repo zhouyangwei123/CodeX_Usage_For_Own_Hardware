@@ -56,6 +56,6 @@ class WrpAreaBRepro
         Console.WriteLine("Boot writes before pre-existing application protection was rejected: " + bootWrites);
         Console.WriteLine("Application writes blocked by WRP1B: " + blockedAppWrites);
         Console.WriteLine("Old reset vector overwritten: " + (FirmwareImage.Read32(flash, 4) != 0xCCCCCCCCu));
-        return failed && bootWrites == 1 && blockedAppWrites == 1 ? 0 : 1;
+        return failed && bootWrites == 0 && blockedAppWrites == 0 && FirmwareImage.Read32(flash,4)==0xCCCCCCCCu ? 0 : 1;
     }
 }

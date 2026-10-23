@@ -44,6 +44,16 @@ namespace CodexToolsHost.Updates
                 throw new IOException("读保护或Bank启动选项不匹配；没有自动修改这些选项。");
             if((wrp&127)<=((wrp>>16)&127))
                 throw new IOException("启动区已设置写保护。已安装本引导程序时请使用USB应用升级，不要重复完整安装。");
+            uint wrpb=FirmwareImage.Read32(options,32);
+            int pageSize=(optr&(1u<<22))!=0 ? 2048 : 4096;
+            int lastPage=(8192+app.Length-1)/pageSize;
+            if((wrpb&127)<=((wrpb>>16)&127) && (wrpb&127)<=lastPage)
+                throw new IOException("WRP1B写保护覆盖首次安装区域，已在写入前停止；没有自动解除保护。");
+            uint pcropStart=FirmwareImage.Read32(options,8)&0x7FFF;
+            uint pcropEnd=FirmwareImage.Read32(options,16)&0x7FFF;
+            int pcropUnit=(optr&(1u<<22))!=0 ? 8 : 16;
+            if(pcropStart<=pcropEnd && pcropStart*pcropUnit<(lastPage+1)*pageSize)
+                throw new IOException("PCROP保护覆盖首次安装区域，已在写入前停止。");
             /* Preserve the original application in bank 1. No config pages or
                bank 2 are erased; their mapping varies with device geometry. */
             byte[] original=read("0x08000000",65536);

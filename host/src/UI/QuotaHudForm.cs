@@ -427,7 +427,6 @@ namespace CodexToolsHost.UI
                 _displayTimer.Dispose();
                 _positionTimer.Dispose();
                 _activityTimer.Dispose();
-                _activityTooltip.Dispose();
                 _apiFont.Dispose();
                 _apiGoFont.Dispose();
                 _renderer.Dispose();

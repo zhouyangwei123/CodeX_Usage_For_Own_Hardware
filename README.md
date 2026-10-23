@@ -1,8 +1,10 @@
 # CodeX Usage
 
-Windows 上位机与 STM32G474 桌面工具的联合仓库。本开发分支：上位机 **0.5.0**、应用固件 **0.9**、启动程序 **1.0**。2026-10-22已通过USB更新、KEY1恢复、受控不完整应用恢复、20次软件重连和5分钟连续通信；仍有三项未修复审查问题，未完成长期验收。
+Windows 上位机与 STM32G474 桌面工具的联合仓库。本开发分支：上位机 **0.5.1**、应用固件 **0.9**、启动程序 **1.0**。当前状态见 [0.5.1安全修复与验收](docs/USB_SAFETY-20261023.md)。
 
-异地继续开发请先读 [当前接手记录](docs/USB_HANDOFF-20261022.md)，使用 [已测试版本整理包](deliverables/usb-update/README.md)。当前分支为 `review/usb-ota-20261022`，默认main仍是旧版。已测试板无需重复首次安装；此后通过USB更新应用，按住KEY1上电可进入恢复模式。固件0.9已包含前一版串口稳定性修复。
+0.5.1修复升级目标绑定、升级中托盘退出和首次安装WRP1B/PCROP检查，移除额度浮窗悬停提示。后续 [OLED Demo、账号曲线与USB调试规划](docs/NEXT_DEMO-20261023.md) 已按128×64像素准备。
+
+上一轮 [实机接手记录](docs/USB_HANDOFF-20261022.md) 与 [0.5.0整理包](deliverables/usb-update/README.md) 保留作历史依据。当前分支为 `fix/usb-update-safety-20261023`，默认main仍是旧版。已安装Boot1.0的板无需重复首次安装；以后通过USB更新应用，按住KEY1上电可恢复。固件0.9包含串口稳定性修复。
 
 上一阶段的 [串口稳定性验证](docs/USB_STABILITY-20261022.md) 保留作问题定位依据。当前正式发布仍为 0.4.2；以下历史说明中的固件冻结和校验边界对应原版。
 
@@ -10,7 +12,7 @@ Windows 上位机与 STM32G474 桌面工具的联合仓库。本开发分支：�
 
 先阅读 [README_先看.md](README_先看.md)，开发接手阅读 [CODEX_接手说明.md](CODEX_接手说明.md)。
 
-Windows 便携发布包见 [0.4.2 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.4.2)。最新验证结果见 [0.4.2 验证记录](docs/VALIDATION-0.4.2.md)。
+正式发布包仍为 [0.4.2 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.4.2)，其验证结果见 [0.4.2记录](docs/VALIDATION-0.4.2.md)。本分支的 [0.5.1候选包及当前边界](deliverables/usb-update-0.5.1/README.md) 另行记录。
 
 - `host/`：WinForms 上位机，额度监控、电脑指标、按键/编码器配置与可选集成。
 - `firmware/STM32G474/`：CubeIDE 固件工程，2026-09-24 原样导入。

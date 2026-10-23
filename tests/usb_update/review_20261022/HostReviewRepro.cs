@@ -46,14 +46,16 @@ class HostReviewRepro
         Array.Copy(BitConverter.GetBytes(0x004000AAu), options, 4);
         Array.Copy(BitConverter.GetBytes(0x00030000u), 0, options, 24, 4);
         bool requestedBoardA = false;
-        string result = new UsbFirmwareUpdater(Run, delegate(int delay) {}).Update(
-            app, args[2], delegate { requestedBoardA = true; }, delegate(string message) {});
+        bool refused=false;
+        try { new UsbFirmwareUpdater(Run, delegate(int delay) {}).Update(
+            app, args[2], "AAAA1111", delegate { requestedBoardA = true; }, delegate(string message) {}); }
+        catch(IOException) { refused=true; }
         Console.WriteLine("Requested CDC board A transition: " + requestedBoardA);
         Console.WriteLine("DFU listing contains only board B: BBBB2222");
         Console.WriteLine("Writes to board B: " + writes);
-        Console.WriteLine("All device operations pinned to board B: " + commands.Where(a => a.Contains("-c")).All(a => a.Contains("sn=BBBB2222")));
-        Console.WriteLine("Updater returned successful completion: " + Directory.Exists(result));
+        Console.WriteLine("No device memory operations: " + commands.All(a => a[0]=="-l"));
+        Console.WriteLine("Updater rejected wrong board: " + refused);
         File.WriteAllLines(Path.Combine(args[2], "commands.txt"), commands.Select(a => string.Join(" ", a)));
-        return requestedBoardA && writes == 1 ? 0 : 1;
+        return requestedBoardA && refused && writes == 0 && commands.All(a=>a[0]=="-l") ? 0 : 1;
     }
 }
