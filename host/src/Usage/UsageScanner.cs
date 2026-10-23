@@ -43,7 +43,7 @@ namespace CodexToolsHost.Usage
             internal DateTimeOffset Created;
             internal DateTime Modified;
             internal long Offset, Length;
-            internal bool Archive, Oversize, InheritedContext, Partial;
+            internal bool Archive, Oversize, InheritedContext, Partial, Paginated;
             internal string Anchor;
             internal List<TokenEvent> Events = new List<TokenEvent>();
             internal HashSet<string> Warnings = new HashSet<string>();
@@ -117,7 +117,7 @@ namespace CodexToolsHost.Usage
             HashSet<string> scanWarnings = warnings;
             warnings = new HashSet<string>();
             List<FileState> canonical = files.Values.Where(x => x.Id != null)
-                .GroupBy(x => x.Id, StringComparer.Ordinal).Select(x => SelectCopy(x, warnings)).ToList();
+                .GroupBy(x => x.Id, StringComparer.Ordinal).Select(x => SelectSession(x, warnings)).ToList();
             Dictionary<string, FileState> sessions = canonical.ToDictionary(x => x.Id, StringComparer.Ordinal);
             List<UsageRow> rows = new List<UsageRow>();
             foreach (FileState state in files.Values)
@@ -217,6 +217,23 @@ namespace CodexToolsHost.Usage
         {
             // Missing model labels affect grouping, but not the completeness of numeric activity.
             return warnings.Any(x => x != MissingModelWarning);
+        }
+        private static FileState SelectSession(IEnumerable<FileState> copies, HashSet<string> warnings)
+        {
+            List<FileState> pages = copies.OrderBy(x => x.Created).ToList();
+            if (pages.Count > 1 && pages.All(x => x.Paginated) && pages.Select(x => x.Parent).Distinct().Count() == 1)
+            {
+                // Desktop resumes append new pages with the same session ID, not full copies.
+                // Merge the numeric timeline before taking cumulative deltas; archive copies
+                // and overlapping pages must still contribute each event only once.
+                FileState first = pages[0];
+                return new FileState { Id = first.Id, Parent = first.Parent, Created = first.Created,
+                    Events = pages.SelectMany(x => x.Events)
+                        .GroupBy(x => new { x.Time, x.Model, x.InheritedContext,
+                            Total = x.Total == null ? null : x.Total.Key, Last = x.Last == null ? null : x.Last.Key })
+                        .Select(x => x.First()).OrderBy(x => x.Time).ToList() };
+            }
+            return SelectCopy(pages, warnings);
         }
         private static FileState SelectCopy(IEnumerable<FileState> copies, HashSet<string> warnings)
         {
@@ -331,6 +348,7 @@ namespace CodexToolsHost.Usage
                 {
                     if (state.Id != null) return;
                     state.Id = SafeLabel(Text(payload, "id"), 100);
+                    state.Paginated = Text(payload, "history_mode") == "paginated";
                     state.Parent = Text(payload, "forked_from_id");
                     if (string.IsNullOrEmpty(state.Parent)) state.Parent = Text(Object(Object(Object(payload, "source"), "subagent"), "thread_spawn"), "parent_thread_id");
                     DateTimeOffset.TryParse(Text(payload, "timestamp") ?? Text(value, "timestamp"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out state.Created);

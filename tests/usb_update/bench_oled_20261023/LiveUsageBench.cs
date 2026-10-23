@@ -24,7 +24,7 @@ internal static class LiveUsageBench
         public event Action<byte,byte[]> FrameReceived {add{link.FrameReceived+=value;}remove{link.FrameReceived-=value;}}
         public event Action<string> StatusChanged {add{link.StatusChanged+=value;}remove{link.StatusChanged-=value;}}
         public bool IsConnected {get{return link.IsConnected;}}public string PortName{get{return link.PortName;}}
-        public int LocalFrames,AccountFrames,Infos,Errors;public bool LocalKnown,AccountKnown,LocalNonzero,LocalPage,AccountPage;
+        public int LocalFrames,AccountFrames,Infos,Errors;public bool LocalKnown,AccountKnown,LocalNonzero,LocalCurveNonzero,LocalPage,AccountPage;
         public bool PcContract=true,SumContract=true;public string Firmware;public byte OledStatus;
         public void Start(){link.Start();}public void Pause(){link.Pause();}public void ConfigurePort(string port){link.ConfigurePort(port);}
         public void Reconnect(){link.Reconnect();}public void Dispose(){link.Dispose();}
@@ -43,6 +43,7 @@ internal static class LiveUsageBench
                         LocalFrames++;LocalKnown|=known;
                         ulong current=BitConverter.ToUInt64(data,16),input=BitConverter.ToUInt64(data,24),output=BitConverter.ToUInt64(data,32);
                         SumContract&=data[1]==0&&current==input+output;LocalNonzero|=known&&current>0;
+                        LocalCurveNonzero|=known&&data.Skip(OledUsageFrame.HeaderSize).Any(x=>x>0&&x<=34);
                     }
                     else {AccountFrames++;AccountKnown|=known;}
                 }
@@ -76,10 +77,14 @@ internal static class LiveUsageBench
                 bridge.SetUsageScope("local");Thread.Sleep(2200);
                 lock(tap)
                 {
+                    var activity=UsageActivity.Create(usage.Report,DateTimeOffset.UtcNow);
+                    bool history=activity.HourTokens>0&&activity.Points.Any(x=>x.Time<DateTimeOffset.UtcNow.AddMinutes(-1)&&x.InputTokens+x.OutputTokens>0);
                     bool passed=tap.LocalKnown&&tap.AccountKnown&&tap.LocalPage&&tap.AccountPage&&tap.SumContract&&tap.PcContract&&
                         tap.Firmware=="0.10"&&(tap.OledStatus&1)!=0&&tap.Errors==0&&tap.LocalFrames>1&&tap.AccountFrames>1;
+                    if(args.Contains("--require-local-history"))passed&=history&&tap.LocalCurveNonzero;
                     result["passed"]=passed;result["hostVersion"]=typeof(BridgeService).Assembly.GetName().Version.ToString();
                     result["localKnown"]=tap.LocalKnown;result["accountKnown"]=tap.AccountKnown;result["localCurrentNonzero"]=tap.LocalNonzero;
+                    result["localHistoryRestored"]=history;result["nonzeroCurveSentToDevice"]=tap.LocalCurveNonzero;
                     result["localFrames"]=tap.LocalFrames;result["accountFrames"]=tap.AccountFrames;
                     result["localAndAccountPagesSent"]=tap.LocalPage&&tap.AccountPage;result["endedOnLocal"]=config.UsageDisplayScope=="local";
                     result["pcMetrics28Bytes"]=tap.PcContract;result["localSumMatches"]=tap.SumContract;

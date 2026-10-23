@@ -41,6 +41,8 @@ internal static class TokenActivityTests
     }
     private static string Count(DateTimeOffset time, int input, int output)
     { return Count(time, input, output, true, 0, 0); }
+    private static string PageMeta(string id, DateTimeOffset time)
+    { return Meta(id, null, time).Replace("\"payload\":{\"id\"", "\"payload\":{\"history_mode\":\"paginated\",\"id\""); }
     private static string Write(string name, string content)
     { string path = Path.Combine(Home, "sessions", name + ".jsonl"); File.WriteAllText(path, content, new UTF8Encoding(false)); return path; }
     private static UsageReport Scan() { return new UsageScanner(Home).Scan(CancellationToken.None); }
@@ -118,6 +120,29 @@ internal static class TokenActivityTests
             UsageReport r = Scan(); UsageActivitySnapshot a = UsageActivity.Create(r,now);
             Check(r.RecentActivity.Count == 1 && r.RecentActivity[0].Time == now.AddSeconds(-30), "one cumulative delta at logged time");
             Check(a.InputTokensPerMinute == 120 && a.OutputTokensPerMinute == 30 && r.Totals.TotalTokens == 150, "cache and reasoning remain subsets");
+        });
+        Test("paginated restart backfills history and preserves cumulative baseline", delegate {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            Write("old", PageMeta("a",now.AddHours(-2)) + Count(now.AddHours(-2),1000,200));
+            string page = Write("page", PageMeta("a",now.AddMinutes(-40)) + Count(now.AddMinutes(-30),1100,220) + Count(now.AddMinutes(-20),1200,240));
+            Directory.CreateDirectory(Path.Combine(Home,"archived_sessions"));
+            File.Copy(page,Path.Combine(Home,"archived_sessions","page-copy.jsonl"));
+            UsageScanner scanner = new UsageScanner(Home); UsageReport r = scanner.Scan(CancellationToken.None);
+            UsageActivitySnapshot a = UsageActivity.Create(r,now);
+            Check(r.Totals.TotalTokens == 1440 && a.HourTokens == 240 && r.RecentActivity.Count == 2,"merge pages, not copies; old cumulative history must not become a new spike");
+            Check(a.Points.Any(x => x.InputTokens+x.OutputTokens>0) && a.InputTokensPerMinute == 0 && !a.IsPartial,"idle startup restores earlier curve at original times");
+            Check(UsageActivity.Create(Scan(),now).HourTokens == a.HourTokens,"cold restart reconstructs same hour without an in-memory cache");
+            File.AppendAllText(page,Count(now.AddSeconds(-10),1250,250));
+            a = UsageActivity.Create(scanner.Scan(CancellationToken.None),now);
+            Check(a.HourTokens == 300 && a.InputTokensPerMinute == 50 && a.OutputTokensPerMinute == 10,"new records append to recovered history");
+        });
+        Test("paginated overlapping pages deduplicate numeric events", delegate {
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            string first=Count(now.AddMinutes(-3),100,20), second=Count(now.AddMinutes(-2),150,30);
+            Write("a",PageMeta("a",now.AddMinutes(-4))+first+second);
+            Write("b",PageMeta("a",now.AddMinutes(-2))+second+Count(now.AddSeconds(-10),180,36));
+            UsageReport r=Scan(); UsageActivitySnapshot a=UsageActivity.Create(r,now);
+            Check(r.Totals.TotalTokens==216 && r.RecentActivity.Count==3 && a.InputTokensPerMinute==30 && !a.IsPartial,"overlap is counted once, independent of filename order");
         });
         Test("archive and fork copies contribute once", delegate {
             DateTimeOffset now = DateTimeOffset.UtcNow;

@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-23",
+  "hostVersion": "0.6.2.0",
+  "baseCommit": "0c0032704f20da1dc56e122a4103548d7a1c590e",
+  "rootCause": "Same-session paginated logs were treated as divergent full copies, so newer pages were excluded.",
+  "realLogReproduction": {
+    "scanCompletedBefore": true,
+    "hourCurveMissingBefore": true,
+    "scanCompletedAfter": true,
+    "pastHourRestoredAfter": true,
+    "currentNonzeroAfter": true,
+    "coverageWarningsRetained": true
+  },
+  "offline": {
+    "newPaginationRegressionsFailedBeforeFix": 2,
+    "tokenActivityGroups": 30,
+    "tokenActivityFailures": 0,
+    "usageGroups": 26,
+    "usageFailures": 0,
+    "tokenHudAssertions": 77,
+    "oledAssertions": 203,
+    "exactCAndCSharpFrameComparisons": 26,
+    "demoRasterStates": 216,
+    "selfcheckAssertions": 86,
+    "mockAssertions": 4
+  },
+  "realDevice": {
+    "passed": true,
+    "hostVersion": "0.6.2.0",
+    "localKnown": true,
+    "accountKnown": true,
+    "localCurrentNonzero": true,
+    "localHistoryRestored": true,
+    "nonzeroCurveSentToDevice": true,
+    "localFrames": 8,
+    "accountFrames": 8,
+    "localAndAccountPagesSent": true,
+    "endedOnLocal": true,
+    "pcMetrics28Bytes": true,
+    "localSumMatches": true,
+    "firmware": "0.10",
+    "oledOnline": true,
+    "errorAcks": 0,
+    "personalValuesOrIdentityRecorded": false
+  },
+  "deployment": {
+    "hostVersion": "0.6.2.0",
+    "installedMatchesTestedCandidate": true,
+    "started": true,
+    "defaultOledPage": 4,
+    "defaultScope": "local",
+    "skin": "pixel",
+    "configurationByteIdentical": true
+  },
+  "firmware": {
+    "version": "0.10",
+    "sourceUnchanged": true,
+    "flashedThisRound": false,
+    "fiveMinuteBenchRepeatedThisRound": false
+  },
+  "release": {
+    "exeSha256": "23d7f96f27ef3a69a681eed01d35043ef70445cb785e733766c217251df5803c",
+    "package": "deliverables/host-0.6.2/CodexToolsHost-0.6.2.zip",
+    "packageSha256": "651fde64a5f39faca37867d661c6812521dbf41d692224694bb8e0215d9be4e0",
+    "packageBytes": 3030513
+  },
+  "personalTokenValuesOrConfigIncluded": false
+}
