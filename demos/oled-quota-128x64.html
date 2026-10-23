@@ -7,51 +7,92 @@
 </style>
 <main><header><div class="eyebrow">NEW MAR TOOL / 128 × 64 MONOCHROME</div><h1>一块小屏，保留额度与活动。</h1><p>只显示 7D 额度。以下为布局演示，所有数字和曲线均为合成样例，未连接账号或设备。</p></header>
 <div class="workspace"><section><div class="label">放大预览 · 每个亮点对应一个真实像素</div><div class="display"><canvas id="screen" width="128" height="64" aria-label="OLED 额度页放大预览"></canvas></div><div class="details"><div><div class="label">128 × 64 原尺寸</div><div class="actual"><canvas id="actual" width="128" height="64" aria-label="OLED 原尺寸预览"></canvas></div></div><p id="mode-note" class="note"></p></div></section>
-<section class="controls"><label><span>曲线布局</span><select id="mode"><option value="local">本机活动 · 最近 1 小时</option><option value="account">账号总量 · 最近 14 天</option><option value="both">双图对照 · 各自的时间尺度</option></select></label><label><span>底栏信息量</span><select id="footer-rows"><option value="1">一行底栏 · 35 像素大曲线</option><option value="2">两行底栏 · 27 像素曲线</option></select></label><label><span>7D 剩余额度 <output id="quota-value">78%</output></span><input id="quota" type="range" min="0" max="100" value="78" aria-label="7D 剩余额度"></label><label class="check"><input id="stale" type="checkbox"><span>预览曲线数据过期</span></label><button id="advance">换一组活动样例</button><p class="note">网速沿用现有固件右上角的 3×5 字体与上下箭头，其余文字用 5×7 字体。移除曲线标题行，原底部网速行也让给曲线；底栏保留 Token 和 API 信息。</p></section></div>
-<table><thead><tr><th>屏内位置</th><th>像素预算</th><th>显示内容</th></tr></thead><tbody><tr><td>顶部</td><td>0–13 行</td><td>7D 余量、倒计时、进度条；右上角显示上下行网速</td></tr><tr><td>中部</td><td id="chart-budget">17–51 行 · 高 35 像素</td><td id="chart-detail">原 19 像素曲线增加 16 像素，省去独立标题</td></tr><tr><td>底部</td><td id="footer-budget">56–62 行</td><td id="footer-detail">一行显示本机输入/输出及 API；L1h 表示本机最近一小时</td></tr></tbody></table>
-<footer>推荐单图大曲线、按键切页。L1h 为本机最近一小时，单位为已上报 Token/分钟；A14d 为账号最近14天，单位为 Token/日。双图以 L / A 标记，两者不共用纵轴，也不表示实时生成 tokens/s。本页不修改固件。</footer></main>
+<section class="controls"><label><span>曲线布局</span><select id="mode"><option value="local">本机活动 · 最近 1 小时</option><option value="account">账号总量 · 最近 14 天</option><option value="both">双图对照 · 各自的时间尺度</option></select></label><label><span>底栏信息量</span><select id="footer-rows"><option value="1">一行底栏 · 35 像素大曲线</option><option value="2">两行底栏 · 27 像素曲线</option></select></label><label><span>7D 剩余额度 <output id="quota-value">78%</output></span><input id="quota" type="range" min="0" max="100" value="78" aria-label="7D 剩余额度"></label><label class="check"><input id="stale" type="checkbox"><span>预览曲线数据过期</span></label><button id="advance">换一组活动样例</button><p id="value-note" class="note"></p><p class="note">图内刻度和次要信息使用 3×5 小字，曲线高度保持不变。右上角箭头仍表示网速；底栏箭头表示 Token 输入/输出。</p></section></div>
+<table><thead><tr><th>屏内位置</th><th>像素预算</th><th>显示内容</th></tr></thead><tbody><tr><td>顶部</td><td>0–13 行</td><td>7D 余量、倒计时、进度条；右上角显示上下行网速</td></tr><tr><td>中部</td><td id="chart-budget">17–51 行 · 高 35 像素</td><td id="chart-detail">图内显示上限、中值、0刻度，纵轴按1/2/5整档缩放</td></tr><tr><td>底部</td><td id="footer-budget">56–62 行</td><td id="footer-detail">大字显示当前合计值，小字用上下箭头区分输入/输出</td></tr></tbody></table>
+<footer>本机视图为最近一小时，单位 Token/分钟；账号视图为最近14天，单位 Token/日。底栏 ↑ 为输入、↓ 为输出；大字为曲线最后一点的合计值，K=千、M=百万。双图以 L / A 标记，各自缩放；小图仅显示上限和0。上限超出时立即升档，回落至较低档的80%后才降档。这些是已上报用量，不表示实时生成 tokens/s。本页不修改固件。</footer></main>
 <script>
 // Same 96 glyphs as firmware/STM32G474/Core/Src/oled.c.
 const FONT=[[0,0,0,0,0],[0,0,95,0,0],[0,7,0,7,0],[20,127,20,127,20],[36,42,127,42,18],[35,19,8,100,98],[54,73,85,34,80],[0,5,3,0,0],[0,28,34,65,0],[0,65,34,28,0],[20,8,62,8,20],[8,8,62,8,8],[0,80,48,0,0],[8,8,8,8,8],[0,96,96,0,0],[32,16,8,4,2],[62,81,73,69,62],[0,66,127,64,0],[66,97,81,73,70],[33,65,69,75,49],[24,20,18,127,16],[39,69,69,69,57],[60,74,73,73,48],[1,113,9,5,3],[54,73,73,73,54],[6,73,73,41,30],[0,54,54,0,0],[0,86,54,0,0],[8,20,34,65,0],[20,20,20,20,20],[0,65,34,20,8],[2,1,81,9,6],[50,73,121,65,62],[126,17,17,17,126],[127,73,73,73,54],[62,65,65,65,34],[127,65,65,34,28],[127,73,73,73,65],[127,9,9,9,1],[62,65,73,73,122],[127,8,8,8,127],[0,65,127,65,0],[32,64,65,63,1],[127,8,20,34,65],[127,64,64,64,64],[127,2,12,2,127],[127,4,8,16,127],[62,65,65,65,62],[127,9,9,9,6],[62,65,81,33,94],[127,9,25,41,70],[70,73,73,73,49],[1,1,127,1,1],[63,64,64,64,63],[31,32,64,32,31],[63,64,56,64,63],[99,20,8,20,99],[7,8,112,8,7],[97,81,73,69,67],[0,127,65,65,0],[2,4,8,16,32],[0,65,65,127,0],[4,2,1,2,4],[64,64,64,64,64],[0,1,2,4,0],[32,84,84,84,120],[127,72,68,68,56],[56,68,68,68,32],[56,68,68,72,127],[56,84,84,84,24],[8,126,9,1,2],[12,82,82,82,62],[127,8,4,4,120],[0,68,125,64,0],[32,64,68,61,0],[127,16,40,68,0],[0,65,127,64,0],[124,4,24,4,120],[124,8,4,4,120],[56,68,68,68,56],[124,20,20,20,8],[8,20,20,24,124],[124,8,4,4,8],[72,84,84,84,32],[4,63,68,64,32],[60,64,64,32,124],[28,32,64,32,28],[60,64,48,64,60],[68,40,16,40,68],[12,80,80,80,60],[68,100,84,76,68],[0,8,54,65,0],[0,0,127,0,0],[0,65,54,8,0],[8,4,8,16,8],[62,65,65,65,62]];
 const canvas=document.querySelector('#screen'),ctx=canvas.getContext('2d');
 let step=0,overflow=0;const modes=document.querySelector('#mode');
-// Same 3×5 network glyphs and positions as app.c / ui_header.h.
-const NET_SYMBOLS='0123456789KMG.-UD';
-const NET_FONT=[[31,17,31],[18,31,16],[29,21,23],[21,21,31],[7,4,31],[23,21,29],[31,21,29],[1,1,31],[31,21,31],[23,21,31],[31,10,17],[31,6,31],[31,17,29],[0,16,0],[4,4,4],[2,31,2],[8,31,8]];
+// Reuse app.c's 3×5 network glyphs; add only the letters needed by ticks/footer.
+const SMALL_SYMBOLS='0123456789KMG.-UD API/mhdL';
+const SMALL_FONT=[[31,17,31],[18,31,16],[29,21,23],[21,21,31],[7,4,31],[23,21,29],[31,21,29],[1,1,31],[31,21,31],[23,21,31],[31,10,17],[31,6,31],[31,17,29],[0,16,0],[4,4,4],[2,31,2],[8,31,8],[0,0,0],[30,5,30],[31,5,7],[17,31,17],[24,4,3],[30,2,30],[31,4,24],[12,18,31],[31,16,16]];
+const scaleTops={local:0,account:0};
 function pixel(x,y){if(x<0||x>=128||y<0||y>=64){overflow++;return}ctx.fillRect(x,y,1,1)}
 function text(x,y,s){for(const ch of s){const n=ch.charCodeAt(0)-32,g=FONT[n]||FONT[31];for(let col=0;col<5;col++)for(let bit=0;bit<7;bit++)if(g[col]&(1<<bit))pixel(x+col,y+bit);x+=6}}
-function networkText(x,y,s){for(const ch of s){const g=NET_FONT[NET_SYMBOLS.indexOf(ch)];for(let col=0;col<3;col++)for(let bit=0;bit<5;bit++)if(g[col]&(1<<bit))pixel(x+col,y+bit);x+=4}}
+function smallText(x,y,s){for(let ch of s){if(ch==='↑')ch='U';if(ch==='↓')ch='D';const g=SMALL_FONT[SMALL_SYMBOLS.indexOf(ch)];for(let col=0;col<3;col++)for(let bit=0;bit<5;bit++)if(g[col]&(1<<bit))pixel(x+col,y+bit);x+=4}}
 function line(x0,y0,x1,y1,dotted=false){let dx=Math.abs(x1-x0),sx=x0<x1?1:-1,dy=-Math.abs(y1-y0),sy=y0<y1?1:-1,err=dx+dy,n=0;for(;;){if(!dotted||n++%2===0)pixel(x0,y0);if(x0===x1&&y0===y1)break;let e=2*err;if(e>=dy){err+=dy;x0+=sx}if(e<=dx){err+=dx;y0+=sy}}}
-function samples(n,account=false){return Array.from({length:n},(_,i)=>Math.max(.04,Math.min(1,.22+.16*Math.sin(i*.32+step)+.52*Math.pow(Math.max(0,Math.sin(i*.12+step*.4)),8)+(account?.15*Math.sin(i*.85):0))))}
-function chart(x,y,w,h,account=false){line(x,y+h-1,x+w-1,y+h-1,true);const a=samples(account?14:60,account),peak=Math.max(...a);let prior=null;for(let i=0;i<a.length;i++){let p=[x+Math.round(i*(w-1)/(a.length-1)),y+h-2-Math.round(a[i]/peak*(h-3))];if(prior)line(...prior,...p);prior=p}}
+function formatCount(value){
+ let unit=value>=1e9?1e9:value>=1e6?1e6:value>=1000?1000:1;
+ let scaled=value/unit,rounded=+scaled.toFixed(scaled>=100?0:1);
+ if(rounded>=1000&&unit<1e9){unit*=1000;rounded=+(value/unit).toFixed(1)}
+ return rounded+({1:'',1000:'K',1000000:'M',1000000000:'G'}[unit]);
+}
+function niceCeiling(value){const decade=10**Math.floor(Math.log10(Math.max(1,value)));return [1,2,5,10].find(n=>n*decade>=value)*decade}
+function scaleTop(key,peak){
+ const target=niceCeiling(peak),prior=scaleTops[key];
+ if(!prior||peak>prior||(target<prior&&peak<=target*.8))scaleTops[key]=target;
+ return scaleTops[key];
+}
+function samples(n,account=false){
+ const amplitude=(account?4200000:28000)*[1,1.1,2.5,.4,6,.1][step%6];
+ return Array.from({length:n},(_,i)=>Math.round(amplitude*Math.max(.04,Math.min(1,.22+.16*Math.sin(i*.32+step)+.52*Math.pow(Math.max(0,Math.sin(i*.12+step*.4)),8)+(account?.15*Math.sin(i*.85):0)))));
+}
+function chart(x,y,w,h,values,key,label=''){
+ const peak=Math.max(...values),upper=scaleTop(key,peak),left=x+22,bottom=y+h-1;
+ const ticks=h>=23?[upper,upper/2,0]:[upper,0];
+ line(left-2,y,left-2,bottom);
+ for(const value of ticks){
+  const py=bottom-Math.round(value/upper*(h-1));
+  smallText(x,Math.max(y,Math.min(bottom-4,py-2)),(value===upper?label:'')+formatCount(value));
+  line(left-2,py,left,py);
+  for(let gx=left+4;gx<x+w;gx+=8)pixel(gx,py);
+ }
+ let prior=null;
+ for(let i=0;i<values.length;i++){
+  const p=[left+Math.round(i*(w-23)/(values.length-1)),bottom-Math.round(values[i]/upper*(h-1))];
+  if(prior)line(...prior,...p);prior=p;
+ }
+ ctx.fillRect(prior[0]-1,Math.max(y,Math.min(bottom-1,prior[1]-1)),2,2);
+ return {key,upper,peak,current:values[values.length-1],point:prior,plot:{left,top:y,right:x+w-1,bottom},ticks};
+}
 function render(){
  overflow=0;ctx.fillStyle='#000';ctx.fillRect(0,0,128,64);ctx.fillStyle='#fff';
  const q=+document.querySelector('#quota').value,mode=modes.value,stale=document.querySelector('#stale').checked;
  const footerRows=+document.querySelector('#footer-rows').value,chartHeight=footerRows===1?35:27;
  document.querySelector('#quota-value').value=q+'%';
- text(2,0,'7D '+q+'%');text(46,0,'4d08h');networkText(82,4,'U80K');networkText(105,4,'D1.2M');
+ text(2,0,'7D '+q+'%');text(46,0,'4d08h');smallText(82,4,'U80K');smallText(105,4,'D1.2M');
  line(2,10,125,10);line(2,13,125,13);pixel(2,11);pixel(125,11);pixel(2,12);pixel(125,12);
  for(let x=3;x<3+Math.round(q*1.22);x++){pixel(x,11);pixel(x,12)}
+ const localValues=samples(60),accountValues=samples(14,true),localCurrent=localValues[59],accountCurrent=accountValues[13];
+ const input=Math.round(localCurrent*.73),output=localCurrent-input,charts=[];
  if(stale){text(34,17+Math.floor((chartHeight-7)/2),'DATA STALE')}
  else if(mode==='both'){
   const h=(chartHeight-3)/2;
-  text(1,17+Math.floor((h-7)/2),'L');text(1,20+h+Math.floor((h-7)/2),'A');
-  chart(10,17,116,h);chart(10,20+h,116,h,true);
- }else{chart(2,17,124,chartHeight,mode==='account')}
- const local=stale?'L1h I-- O--/m':'L1h I12k O4k/m';
- const account=stale?'A14d --/d':'A14d 2.1M/d';
- if(footerRows===1){text(2,56,(mode==='account'?account:mode==='both'?'L1h/m A14d/d':local)+' API6.8')}
+  charts.push(chart(2,17,124,h,localValues,'local','L'),chart(2,20+h,124,h,accountValues,'account','A'));
+ }else{charts.push(chart(2,17,124,chartHeight,mode==='account'?accountValues:localValues,mode))}
+ const local=(stale?'--':formatCount(localCurrent))+'/m',account=(stale?'--':formatCount(accountCurrent))+'/d';
+ const arrows='↑'+(stale?'--':formatCount(input))+' ↓'+(stale?'--':formatCount(output));
+ const footer=[];
+ if(mode==='both'&&footerRows===1){footer.push('L'+local+' '+arrows+' A'+account);smallText(2,58,footer[0])}
  else{
-  text(2,46,stale?(mode==='account'?'A14d DAY--':'L1h I-- O--/m'):mode==='account'?'A14d DAY2.1M':'L1h I12.3k O4.5k/m');
-  text(2,56,stale?'API6.8 ALL--':'API6.8 ALL128M');
+  const fy=footerRows===1?56:46;
+  footer.push(mode==='account'?account:local,mode==='account'?'14d':arrows);
+  text(2,fy,footer[0]);smallText(48,fy+2,footer[1]+(footerRows===1?' API6.8':''));
+  if(footerRows===2){
+   footer.push(mode==='both'?'A'+account+' API6.8 ALL'+(stale?'--':'128M'):stale?'API6.8 ALL--':'API6.8 ALL128M');
+   if(mode==='both')smallText(2,58,footer[2]);else text(2,56,footer[2]);
+  }
  }
  document.querySelector('#actual').getContext('2d').drawImage(canvas,0,0);
- document.querySelector('#mode-note').textContent=mode==='both'?'双图每条高 '+(chartHeight-3)/2+' 像素；L 为本机最近一小时，A 为账号最近14天，各自缩放。':mode==='account'?'A14d 表示账号最近14天，按日展示；底栏显示当日用量，切换两行底栏可查看账号累计量。':'L1h 表示本机最近一小时，I/O 为已上报输入/输出 Token/分钟，API6.8 为 API 样例值；两行底栏可显示更多有效数字及账号累计量。';
+ document.querySelector('#mode-note').textContent=mode==='both'?'L 为本机最近一小时，A 为账号最近14天。两图各有上限和0刻度，独立缩放；底栏分别显示最后一点的当前值。':mode==='account'?'账号最近14天，单位 Token/日。底栏大字是最后一天的用量；接口没有输入/输出分项，本页不显示分项箭头。':'本机最近一小时，单位 Token/分钟。原 L1h 表示本机1小时，I/O 表示输入/输出；现已改为底栏 ↑ 输入、↓ 输出，大字是两者的当前合计。';
+ document.querySelector('#value-note').textContent=stale?'用量数据过期：不显示刻度或当前数值，不把未知画成0。':charts.map(c=>(c.key==='local'?'本机':'账号')+'：上限 '+formatCount(c.upper)+'，当前 '+formatCount(c.current)+(c.key==='local'?' Token/分钟':' Token/日')).join('；')+'。上限为1/2/5整档，回落时保留余量，避免临界点跳档。';
  document.querySelector('#chart-budget').textContent='17–'+(16+chartHeight)+' 行 · 高 '+chartHeight+' 像素';
- document.querySelector('#chart-detail').textContent=mode==='both'?'两条 '+(chartHeight-3)/2+' 像素高的曲线，以 L / A 区分':'原 19 像素曲线增加 '+(chartHeight-19)+' 像素，省去独立标题';
+ document.querySelector('#chart-detail').textContent=mode==='both'?'两条 '+(chartHeight-3)/2+' 像素高的曲线，各自标上限和0':'图内小字标上限、中值、0，曲线高度保持不变';
  document.querySelector('#footer-budget').textContent=footerRows===1?'56–62 行':'46–62 行';
- document.querySelector('#footer-detail').textContent=footerRows===1?'一行保留当前视图用量及 API，网速已移至右上角':'两行保留更详细的用量、API 与账号累计量';
- window.oledFrame={width:128,height:64,overflow,mode,stale,quota:q,footerRows,chartHeight};
+ document.querySelector('#footer-detail').textContent=mode==='both'&&footerRows===1?'小字显示两图当前值及输入/输出；API可在两行底栏查看':'当前值对应曲线最后一点；本机用上下箭头标输入/输出';
+ window.oledFrame={width:128,height:64,overflow,mode,stale,quota:q,footerRows,chartHeight,charts,footer,localCurrent:stale?null:localCurrent,accountCurrent:stale?null:accountCurrent,input:stale?null:input,output:stale?null:output};
 }
 document.querySelector('#quota').addEventListener('input',render);modes.addEventListener('change',render);document.querySelector('#footer-rows').addEventListener('change',render);document.querySelector('#stale').addEventListener('change',render);document.querySelector('#advance').addEventListener('click',()=>{step++;render()});render();
 </script></html>
