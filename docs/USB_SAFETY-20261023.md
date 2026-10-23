@@ -28,19 +28,31 @@
 
 ## 本机实测与部署
 
-识别到ST-Link及同一块STM32G474RB / 128 KiB板卡，串口为COM6。只读核对得到Boot1.0/App0.9，CRC与交付镜像匹配，WRP1A保护前8KiB，WRP1B未启用。测试后的前64KiB Flash和选项字节与测试前完全一致。
+识别到ST-Link及同一块STM32G474RB / 128 KiB板卡，串口为COM6。只读核对得到Boot1.0/App0.9，CRC与交付镜像匹配，WRP1A保护前8KiB，WRP1B未启用。串口测试和实际USB重写后的前64KiB Flash、选项字节均与测试前完全一致；最终只读核对使用SWD Hot Plug，不改保护设置。
 
 新版生产SerialLink通过10次Reconnect与10次Pause/Start，均取得新握手和INFO。随后连续通信300.008秒，1192/1192回显，无未回答或意外回显、运行时间倒退及意外断连，最大往返8ms；释放后独占打开检查成功。这不是8小时验收，也不覆盖系统睡眠或物理拔插。
 
+这次串口测试的EXE为0.5.1早期构建，SHA-256为 `a2cf82b0fc16b5e862f79192ad40dc4cf9c120a4cb4b0e7da10b75e4adb08c98`。之后仅清理WMI资源释放及悬停说明相关代码，SerialLink实现未变。下述USB实测、本机安装与交付包均使用最终构建 `ef2cb6efa403a30759ea9ed23fda571741325071b79118ff8352e005dc27be2b`。
+
 原上位机0.4.2已正常退出，原EXE与配置留有本地备份；安装目录EXE已更新为0.5.1并启动。个人配置、认证与芯片备份不纳入仓库。
 
-### USB升级验证状态
+### USB升级实测通过
 
-**待完成：WinUSB驱动安装后的本机实际更新、回读与重连。** 软件请求已使同一设备进入ROM；最初Windows缺驱动。安装Microsoft更新目录的旧ST DFU驱动后Windows状态正常，但CubeIDE附带CubeProgrammer2.17仍无法枚举，不能据此宣称USB升级通过。
+2026-10-23 09:30（UTC+8），使用完整STM32CubeProgrammer 2.23.0完成真实USB升级，设备身份为 `20553872524E`。测试后系统DFU驱动属性为WinUSB 1.3.0.0 / `oem49.inf`。验证如下：
 
-ST WinUSB INF、Microsoft签名目录及配套文件已准备；自动审批拒绝管理员安装，返回 `blocked by policy`。等待用户手动安装后继续。当前板卡已复位回正常应用，本机0.5.1运行中。
+- 从实际CDC身份进入ROM DFU，使用故意不匹配的预期身份；更新器拒绝，内存读写命令为0。
+- 绑定正确身份，读取并验证启动区和保护设置，备份原应用，实际写入App0.9；工具校验和45,384字节逐字节回读均通过。
+- 实际写入阶段调用真实托盘退出入口和ExitThread；共享升级状态均阻止退出。
+- 自动跳转Boot1.0后重新枚举COM6，生产SerialLink重新取得App0.9 INFO。
+- 最终前64KiB Flash SHA-256为 `af79da65fd0a290ececc117903ef6b73b715b3b19f05065ffea2cde3662fe2bb`，选项字节为 `376a7c2373875af69a759025367692f46f521dd5dc119b46ab4207f7418a634f`，均与测试前一致。
+
+原始命令日志和完整芯片备份留在本地忽略目录 `artifacts/safety-20261023/hardware-usb-full223/`；可公开的结果摘要见 [本机验收证据](evidence/usb-safety-20261023.json)。测试后已恢复正常CDC连接并重启本机安装的0.5.1。
+
+此前两次尝试分别因缺驱动、旧ST DFU驱动与CubeIDE精简2.17工具不匹配而停止，均没有写入Flash，保留失败记录。当时自动审批拒绝代为管理员安装（`blocked by policy`）；用户随后提供完整2.23.0安装目录，继续测试时兼容WinUSB已可用。本轮没有重试被拒绝的提权操作。
 
 WRP1B/PCROP冲突在模拟设备验证；本机板卡已保护启动区，不重复首次安装或为了测试改写保护。
+
+此次验证限于这块128KiB板卡、App0.9和上述工具/驱动组合；尚未覆盖长时间运行、系统睡眠、更新中物理断电或所有Windows环境。封装工具原始 `firmware-manifest.json` 的 `hardware_tested:false` 保留为构建时标记，不能替代这里逐项记录的实测范围。
 
 ## 重现
 

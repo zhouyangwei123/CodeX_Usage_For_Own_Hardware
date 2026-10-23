@@ -1,0 +1,183 @@
+{
+  "date": "2026-10-23",
+  "sourceCommit": "00bdbc27f8bb16999e288ae17bdd6afe074ad9cf",
+  "hostVersion": "0.5.1.0",
+  "finalHostSha256": "ef2cb6efa403a30759ea9ed23fda571741325071b79118ff8352e005dc27be2b",
+  "installedHostMatchesFinal": true,
+  "device": {
+    "mcu": "STM32G474RB",
+    "flashBytes": 131072,
+    "usbSerial": "20553872524E",
+    "normalPort": "COM6",
+    "bootVersion": "1.0",
+    "appVersion": "0.9"
+  },
+  "serialBench": {
+    "assemblySha256": "A2CF82B0FC16B5E862F79192AD40DC4CF9C120A4CB4B0E7DA10B75E4ADB08C98",
+    "startedUtc": "2026-10-23T00:58:39.4897149Z",
+    "continuousRunSeconds": 300.008,
+    "unexpectedDisconnectsDuringContinuousRun": 0,
+    "passed": true,
+    "portAvailableAfterDispose": true,
+    "echoSent": 1192,
+    "matchingEcho": 1192,
+    "unansweredEcho": 0,
+    "unexpectedEcho": 0,
+    "maxRttMs": 8,
+    "uptimeRegressed": false,
+    "cycles": [
+      {
+        "cycle": 1,
+        "operation": "Reconnect",
+        "reconnectMs": 315,
+        "passed": true
+      },
+      {
+        "cycle": 2,
+        "operation": "Pause/Start",
+        "reconnectMs": 6003,
+        "passed": true
+      },
+      {
+        "cycle": 3,
+        "operation": "Reconnect",
+        "reconnectMs": 299,
+        "passed": true
+      },
+      {
+        "cycle": 4,
+        "operation": "Pause/Start",
+        "reconnectMs": 6029,
+        "passed": true
+      },
+      {
+        "cycle": 5,
+        "operation": "Reconnect",
+        "reconnectMs": 301,
+        "passed": true
+      },
+      {
+        "cycle": 6,
+        "operation": "Pause/Start",
+        "reconnectMs": 5992,
+        "passed": true
+      },
+      {
+        "cycle": 7,
+        "operation": "Reconnect",
+        "reconnectMs": 297,
+        "passed": true
+      },
+      {
+        "cycle": 8,
+        "operation": "Pause/Start",
+        "reconnectMs": 6008,
+        "passed": true
+      },
+      {
+        "cycle": 9,
+        "operation": "Reconnect",
+        "reconnectMs": 298,
+        "passed": true
+      },
+      {
+        "cycle": 10,
+        "operation": "Pause/Start",
+        "reconnectMs": 6001,
+        "passed": true
+      },
+      {
+        "cycle": 11,
+        "operation": "Reconnect",
+        "reconnectMs": 297,
+        "passed": true
+      },
+      {
+        "cycle": 12,
+        "operation": "Pause/Start",
+        "reconnectMs": 5992,
+        "passed": true
+      },
+      {
+        "cycle": 13,
+        "operation": "Reconnect",
+        "reconnectMs": 296,
+        "passed": true
+      },
+      {
+        "cycle": 14,
+        "operation": "Pause/Start",
+        "reconnectMs": 6001,
+        "passed": true
+      },
+      {
+        "cycle": 15,
+        "operation": "Reconnect",
+        "reconnectMs": 299,
+        "passed": true
+      },
+      {
+        "cycle": 16,
+        "operation": "Pause/Start",
+        "reconnectMs": 5999,
+        "passed": true
+      },
+      {
+        "cycle": 17,
+        "operation": "Reconnect",
+        "reconnectMs": 300,
+        "passed": true
+      },
+      {
+        "cycle": 18,
+        "operation": "Pause/Start",
+        "reconnectMs": 6009,
+        "passed": true
+      },
+      {
+        "cycle": 19,
+        "operation": "Reconnect",
+        "reconnectMs": 312,
+        "passed": true
+      },
+      {
+        "cycle": 20,
+        "operation": "Pause/Start",
+        "reconnectMs": 5996,
+        "passed": true
+      }
+    ]
+  },
+  "serialBuildScope": "Early 0.5.1 build; final build only changed WMI disposal and hover-related cleanup. SerialLink implementation unchanged. USB bench uses final build.",
+  "usbBench": {
+    "startedUtc": "2026-10-23T01:30:03.5635976Z",
+    "finishedUtc": "2026-10-23T01:30:21.9729727Z",
+    "hostVersion": "0.5.1.0",
+    "cdcIdentityMatched": true,
+    "initialFirmware": "0.9",
+    "actualDfuMismatchRejectedBeforeMemoryAccess": true,
+    "trayExitDeniedWhileActualUpdateActive": true,
+    "reconnectedFirmware": "0.9",
+    "steps": 10,
+    "passed": true
+  },
+  "programmerVersion": "2.23.0",
+  "dfuDriverAfterTest": {
+    "service": "WINUSB",
+    "version": "1.3.0.0",
+    "inf": "oem49.inf"
+  },
+  "postUsbReadback": {
+    "method": "SWD Hot Plug, read only",
+    "flashFirst65536BytesUnchanged": true,
+    "flashFirst65536Sha256": "af79da65fd0a290ececc117903ef6b73b715b3b19f05065ffea2cde3662fe2bb",
+    "optionBytesUnchanged": true,
+    "optionBytesSha256": "376a7c2373875af69a759025367692f46f521dd5dc119b46ab4207f7418a634f"
+  },
+  "limits": [
+    "One 128KiB board",
+    "Five-minute continuous serial test",
+    "No eight-hour, sleep, physical unplug or power-loss-during-update validation",
+    "WRP1B/PCROP conflicts tested offline; no deliberate hardware protection changes"
+  ]
+}

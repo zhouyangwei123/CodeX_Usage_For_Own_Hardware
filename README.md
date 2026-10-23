@@ -12,7 +12,7 @@ Windows 上位机与 STM32G474 桌面工具的联合仓库。本开发分支：�
 
 先阅读 [README_先看.md](README_先看.md)，开发接手阅读 [CODEX_接手说明.md](CODEX_接手说明.md)。
 
-正式发布包仍为 [0.4.2 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.4.2)，其验证结果见 [0.4.2记录](docs/VALIDATION-0.4.2.md)。本分支的 [0.5.1候选包及当前边界](deliverables/usb-update-0.5.1/README.md) 另行记录。
+正式发布包仍为 [0.4.2 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.4.2)，其验证结果见 [0.4.2记录](docs/VALIDATION-0.4.2.md)。本分支的 [0.5.1测试包及实测范围](deliverables/usb-update-0.5.1/README.md) 另行记录。
 
 - `host/`：WinForms 上位机，额度监控、电脑指标、按键/编码器配置与可选集成。
 - `firmware/STM32G474/`：CubeIDE 固件工程，2026-09-24 原样导入。
