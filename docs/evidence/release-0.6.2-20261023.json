@@ -1,0 +1,100 @@
+{
+  "date": "2026-10-23",
+  "release": {
+    "releaseId": 421688769,
+    "tag": "v0.6.2",
+    "commit": "7e848a43181a622d9903076f2c5cc341f48c822e",
+    "url": "https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.6.2",
+    "draft": false,
+    "prerelease": false,
+    "publishedAt": "2026-10-23T10:01:56Z",
+    "assets": [
+      {
+        "id": 668713254,
+        "name": "CodexToolsHost-0.6.2.zip",
+        "size": 3030513,
+        "digest": "sha256:651fde64a5f39faca37867d661c6812521dbf41d692224694bb8e0215d9be4e0",
+        "browser_download_url": "https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/download/v0.6.2/CodexToolsHost-0.6.2.zip"
+      },
+      {
+        "id": 668713632,
+        "name": "SHA256SUMS.txt",
+        "size": 91,
+        "digest": "sha256:8ad2356707db11a3726794b63fcfaaf7110ca3115448c7ebc3e0dbd1a7b3edf4",
+        "browser_download_url": "https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/download/v0.6.2/SHA256SUMS.txt"
+      }
+    ],
+    "credentialRecorded": false
+  },
+  "anonymousVerification": {
+    "latestStableTag": "v0.6.2",
+    "releaseId": 421688769,
+    "draft": false,
+    "prerelease": false,
+    "releaseUrl": "https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.6.2",
+    "downloads": [
+      {
+        "name": "CodexToolsHost-0.6.2.zip",
+        "anonymousDownloadVerified": true,
+        "bytes": 3030513,
+        "sha256": "651fde64a5f39faca37867d661c6812521dbf41d692224694bb8e0215d9be4e0"
+      },
+      {
+        "name": "SHA256SUMS.txt",
+        "anonymousDownloadVerified": true,
+        "bytes": 91,
+        "sha256": "8ad2356707db11a3726794b63fcfaaf7110ca3115448c7ebc3e0dbd1a7b3edf4"
+      }
+    ],
+    "downloadedExeMatchesTested": true,
+    "noCredentialsRequired": true
+  },
+  "original042Client": {
+    "assemblySha256": "f7f8b395c6b7fe1cd8edf70cd07b4bd7bbf49ac90fd5a8f07947ffcc11f8751c",
+    "before": {
+      "CurrentVersion": "0.4.2.0",
+      "LatestTag": "v0.4.2",
+      "State": "UpToDate",
+      "Message": "当前已是最新正式版本",
+      "ReleaseUrl": "https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.4.2",
+      "Successful": true
+    },
+    "after": {
+      "CurrentVersion": "0.4.2.0",
+      "LatestTag": "v0.6.2",
+      "State": "UpdateAvailable",
+      "Message": "发现新版本 v0.6.2",
+      "ReleaseUrl": "https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.6.2",
+      "Successful": true
+    },
+    "runOnCurrentComputer": true,
+    "remoteComputerNetworkNotTested": true
+  },
+  "syntheticConfigMigration": [
+    {
+      "oldVersion": "0.4.2.0",
+      "newVersion": "0.6.2.0",
+      "style": "glass",
+      "allOldFieldsPreserved": true,
+      "sourceDefaultsLocal": true
+    },
+    {
+      "oldVersion": "0.4.2.0",
+      "newVersion": "0.6.2.0",
+      "style": "minimal",
+      "allOldFieldsPreserved": true,
+      "sourceDefaultsLocal": true
+    },
+    {
+      "oldVersion": "0.4.2.0",
+      "newVersion": "0.6.2.0",
+      "style": "classic",
+      "allOldFieldsPreserved": true,
+      "sourceDefaultsLocal": true
+    }
+  ],
+  "configReliabilityPassed": true,
+  "applicationOrFirmwareSourceChangedForRelease": false,
+  "newFirmwareFlashedForRelease": false,
+  "personalConfigOrCredentialsIncluded": false
+}
