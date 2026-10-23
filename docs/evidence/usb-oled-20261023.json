@@ -1,0 +1,218 @@
+{
+  "date": "2026-10-23",
+  "sourceCommit": "b5064f6bc8a4add0fa699b1f671ab11d50b55303",
+  "versions": {
+    "host": "0.6.1.0",
+    "application": "0.10",
+    "boot": "1.0"
+  },
+  "finalHostSha256": "d6e420d4c715b4c831d08c5aa2c6d6b3563c0e099320bc71414ccd2d828016a0",
+  "appSha256": "5fb757267957b7c11b0a60a25986338e5c7ceff17f25182e33b1f69e8f2aab94",
+  "bootSha256": "fc479fe98c0f74219aaf1d83bc6084bb1f490b56cca9c763ebc4f48a36f3046c",
+  "usbAndSoakHostSha256": "3914f42a703e94f937f46b3a1d7e94a5a3a47ef3b79294b23bf59f8440a3c2ea",
+  "buildScope": "USB/soak used 0.6.1 before the final default-skin-only change. Firmware, SerialLink and production updater code are identical. Final EXE repeated offline checks and real-source hardware traffic.",
+  "deployment": {
+    "skin": "pixel",
+    "defaultScope": "local",
+    "defaultOledPage": 4,
+    "installedMatchesCandidate": true,
+    "started": true,
+    "version": "0.6.1.0",
+    "otherUserSettingsPreserved": true
+  },
+  "usb": {
+    "initialFirmware": "0.9",
+    "targetFirmware": "0.10",
+    "reconnectedFirmware": "0.10",
+    "cdcIdentityMatched": true,
+    "actualDfuMismatchRejectedBeforeMemoryAccess": true,
+    "boot8192BytesUnchanged": true,
+    "optionBytesUnchanged": true,
+    "trayExitDeniedWhileActualUpdateActive": true,
+    "steps": 10,
+    "startedUtc": "2026-10-23T09:02:58.8942371Z",
+    "finishedUtc": "2026-10-23T09:03:19.8837019Z",
+    "passed": true
+  },
+  "serial": {
+    "continuousRunSeconds": 300.005,
+    "echoSent": 1177,
+    "matchingEcho": 1177,
+    "unansweredEcho": 0,
+    "unexpectedEcho": 0,
+    "maxRttMs": 11,
+    "uptimeRegressed": false,
+    "unexpectedDisconnectsDuringContinuousRun": 0,
+    "syntheticBusinessBatches": 298,
+    "pageChangesSent": 20,
+    "finalOledStatus": 5,
+    "lastFirmwareVersion": "0.10",
+    "portAvailableAfterDispose": true,
+    "passed": true
+  },
+  "reconnectCycles": [
+    {
+      "cycle": 1,
+      "operation": "Reconnect",
+      "reconnectMs": 295,
+      "passed": true
+    },
+    {
+      "cycle": 2,
+      "operation": "Pause/Start",
+      "reconnectMs": 6007,
+      "passed": true
+    },
+    {
+      "cycle": 3,
+      "operation": "Reconnect",
+      "reconnectMs": 297,
+      "passed": true
+    },
+    {
+      "cycle": 4,
+      "operation": "Pause/Start",
+      "reconnectMs": 5986,
+      "passed": true
+    },
+    {
+      "cycle": 5,
+      "operation": "Reconnect",
+      "reconnectMs": 296,
+      "passed": true
+    },
+    {
+      "cycle": 6,
+      "operation": "Pause/Start",
+      "reconnectMs": 6009,
+      "passed": true
+    },
+    {
+      "cycle": 7,
+      "operation": "Reconnect",
+      "reconnectMs": 310,
+      "passed": true
+    },
+    {
+      "cycle": 8,
+      "operation": "Pause/Start",
+      "reconnectMs": 6004,
+      "passed": true
+    },
+    {
+      "cycle": 9,
+      "operation": "Reconnect",
+      "reconnectMs": 296,
+      "passed": true
+    },
+    {
+      "cycle": 10,
+      "operation": "Pause/Start",
+      "reconnectMs": 6001,
+      "passed": true
+    },
+    {
+      "cycle": 11,
+      "operation": "Reconnect",
+      "reconnectMs": 297,
+      "passed": true
+    },
+    {
+      "cycle": 12,
+      "operation": "Pause/Start",
+      "reconnectMs": 5998,
+      "passed": true
+    },
+    {
+      "cycle": 13,
+      "operation": "Reconnect",
+      "reconnectMs": 310,
+      "passed": true
+    },
+    {
+      "cycle": 14,
+      "operation": "Pause/Start",
+      "reconnectMs": 5988,
+      "passed": true
+    },
+    {
+      "cycle": 15,
+      "operation": "Reconnect",
+      "reconnectMs": 311,
+      "passed": true
+    },
+    {
+      "cycle": 16,
+      "operation": "Pause/Start",
+      "reconnectMs": 6005,
+      "passed": true
+    },
+    {
+      "cycle": 17,
+      "operation": "Reconnect",
+      "reconnectMs": 296,
+      "passed": true
+    },
+    {
+      "cycle": 18,
+      "operation": "Pause/Start",
+      "reconnectMs": 6000,
+      "passed": true
+    },
+    {
+      "cycle": 19,
+      "operation": "Reconnect",
+      "reconnectMs": 292,
+      "passed": true
+    },
+    {
+      "cycle": 20,
+      "operation": "Pause/Start",
+      "reconnectMs": 6008,
+      "passed": true
+    }
+  ],
+  "realUsage": {
+    "passed": true,
+    "hostVersion": "0.6.1.0",
+    "localKnown": true,
+    "accountKnown": true,
+    "localCurrentNonzero": false,
+    "localFrames": 11,
+    "accountFrames": 11,
+    "localAndAccountPagesSent": true,
+    "endedOnLocal": true,
+    "pcMetrics28Bytes": true,
+    "localSumMatches": true,
+    "firmware": "0.10",
+    "oledOnline": true,
+    "errorAcks": 0,
+    "personalValuesOrIdentityRecorded": false
+  },
+  "physicalDisplay": {
+    "confirmedByUser": true,
+    "response": "显示正常",
+    "scope": "Top margin, curve and footer after USB update"
+  },
+  "offline": {
+    "oledIntegration": 203,
+    "exactPixelComparisons": 26,
+    "demoRasterStates": 216,
+    "tokenHud": 77,
+    "selfchecks": {
+      "selfcheck": 86,
+      "mock": 4,
+      "ui-batch": 15,
+      "phase-two": 10
+    },
+    "updater": 55,
+    "firmwareImage": 9,
+    "updateRequest": 3
+  },
+  "limits": [
+    "One board",
+    "Five-minute communication test, no eight-hour/sleep/unplug/power-loss test",
+    "KEY1 physical recovery was validated on the unchanged Boot1.0 in the earlier stage; not repeated here",
+    "No manual knob-feel acceptance in this round"
+  ]
+}

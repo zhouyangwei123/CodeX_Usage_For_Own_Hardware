@@ -75,7 +75,10 @@ def main():
     for name, digest in hashes.items():
         assert hashlib.sha256(files[name]).hexdigest() == digest, name
     manifest = json.loads(files['firmware-manifest.json'])
-    assert manifest['hardware_tested'] is False
+    assert isinstance(manifest['hardware_tested'], bool)
+    if manifest['hardware_tested']:
+        assert manifest['verification']['host_sha256'] == hashlib.sha256(files['CodexToolsHost.exe']).hexdigest()
+        assert manifest['verification']['app_sha256'] == hashlib.sha256(files[app_bin]).hexdigest()
     for name, detail in manifest['files'].items():
         assert len(files[name]) == detail['bytes']
         assert hashlib.sha256(files[name]).hexdigest() == detail['sha256']
