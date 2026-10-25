@@ -1,6 +1,6 @@
 # CodeX Usage
 
-本分支另含[App0.11用量页1Hz写屏试验](docs/OLED_1HZ-20261023.md)，已在本机USB更新，噪音改善待听感反馈。下面保留正式Host0.6.2与App0.10交付基线；本次试验未改写正式Release。
+本分支当前为[App0.12温和三档随机时钟试验](docs/OLED_GENTLE-20261026.md)，保留1Hz用量页；用户反馈此前[App0.11仅降频](docs/OLED_1HZ-20261023.md)未显著改善噪音。下面保留正式Host0.6.2与App0.10交付基线；本次试验未改写正式Release。
 
 Windows 上位机与 STM32G474 桌面工具的联合仓库。当前版本：上位机 **0.6.2**、应用固件 **0.10**、启动程序 **1.0**。[正式发布与更新方法](docs/RELEASE-0.6.2.md)、[上位机下载](deliverables/host-0.6.2/README.md)。0.6.2修复分页日志遗漏，启动自动补回最近一小时真实用量；默认显示本机Token用量，可手动切换账号日汇总，新配置默认像素OLED皮肤。实测范围见[历史曲线修复](docs/USAGE_HISTORY-20261023.md)和[0.6.1 USB与OLED验收](docs/USB_OLED-20261023.md)。
 

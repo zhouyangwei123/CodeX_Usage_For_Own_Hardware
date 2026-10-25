@@ -53,6 +53,10 @@ typedef enum
 } oled_noise_diag_state_t;
 
 static uint8_t oled_noise_diag_active;
+#if OLED_NOISE_DIAG_ROUND == 0u
+static uint8_t oled_clock_spread_lfsr = 0x5Du;
+static uint32_t oled_clock_spread_last_ms;
+#endif
 #if OLED_NOISE_DIAG_ROUND >= 1u && OLED_NOISE_DIAG_ROUND <= 7u
 static uint32_t oled_noise_diag_started_ms;
 #endif
@@ -301,6 +305,33 @@ static void oled_write_cmd(uint8_t cmd)
     oled_ok = 0;
   }
 }
+
+#if OLED_NOISE_DIAG_ROUND == 0u
+static void oled_clock_spread_process(uint32_t now_ms)
+{
+  /* Same values, seed and recurrence as the former round-5 gentle trial.
+     Send only while the shared I2C bus is idle, outside framebuffer DMA. */
+  static const uint8_t values[] = {0x90u, 0xA0u, 0xB0u};
+  if (!oled_ok || oled_driver == 2u || oled_dma_active || oled_dma_inflight ||
+      (uint32_t)(now_ms - oled_clock_spread_last_ms) < OLED_CLOCK_SPREAD_UPDATE_MS ||
+      HAL_I2C_GetState(&hi2c3) != HAL_I2C_STATE_READY) return;
+  uint8_t feedback = (uint8_t)(((oled_clock_spread_lfsr >> 6) ^
+                               (oled_clock_spread_lfsr >> 5)) & 1u);
+  uint8_t next = (uint8_t)(((oled_clock_spread_lfsr << 1) & 0x7Fu) | feedback);
+  uint8_t command[] = {0xD5u, values[next % sizeof(values)]};
+  HAL_StatusTypeDef status = HAL_I2C_Mem_Write(&hi2c3, active_addr << 1,
+      0x00u, I2C_MEMADD_SIZE_8BIT, command, sizeof(command), 5u);
+  if (status == HAL_BUSY) return;
+  if (status != HAL_OK)
+  {
+    oled_ok = 0u;
+    oled_tx_fb_valid = 0u;
+    return;
+  }
+  oled_clock_spread_lfsr = next;
+  oled_clock_spread_last_ms = now_ms;
+}
+#endif
 
 #if OLED_NOISE_DIAG_ROUND == 7u
 static void oled_noise_round7_apply_profile(
@@ -790,7 +821,7 @@ void oled_noise_diag_process(uint32_t now_ms)
   oled_write_cmd(0xD5);
   oled_write_cmd(d5_value);
 #else
-  (void)now_ms;
+  oled_clock_spread_process(now_ms);
 #endif
 }
 
@@ -980,6 +1011,10 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
 
 void oled_init(void)
 {
+#if OLED_NOISE_DIAG_ROUND == 0u
+  oled_clock_spread_lfsr = 0x5Du;
+  oled_clock_spread_last_ms = HAL_GetTick();
+#endif
   oled_tx_fb_valid = 0u;
   oled_dma_runtime = 0u;
   oled_dma_failed = 0u;

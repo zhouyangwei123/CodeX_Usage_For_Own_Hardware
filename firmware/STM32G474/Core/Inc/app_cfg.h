@@ -20,6 +20,8 @@
 #define OLED_HEIGHT           64
 /* 0 = 自动；1 = SSD1306/SSD1309；2 = SH1106（列偏移 2） */
 #define OLED_DRIVER_TYPE      0
+/* Restore the former gentle D5 spread while keeping normal display pages. */
+#define OLED_CLOCK_SPREAD_UPDATE_MS 17u
 
 /* OLED audible-noise controlled diagnostic. 0 = production behavior. */
 #define OLED_NOISE_DIAG_ROUND       0u
@@ -63,7 +65,7 @@
 #define OLED_AUTO_INTERVAL_MS  5000u
 #define HOST_LINK_TIMEOUT_MS  5000  /* 超过该时间未收到主机 STATUS 视为离线 */
 #define FW_VERSION_MAJOR      0
-#define FW_VERSION_MINOR      11
+#define FW_VERSION_MINOR      12
 #define FW_MODEL_STRING       "CodeX Tools"
 
 #endif /* __APP_CFG_H */

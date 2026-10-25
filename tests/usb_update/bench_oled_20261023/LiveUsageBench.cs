@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -26,6 +27,8 @@ internal static class LiveUsageBench
         public bool IsConnected {get{return link.IsConnected;}}public string PortName{get{return link.PortName;}}
         public int LocalFrames,AccountFrames,Infos,Errors;public bool LocalKnown,AccountKnown,LocalNonzero,LocalCurveNonzero,LocalPage,AccountPage;
         public bool PcContract=true,SumContract=true;public string Firmware;public byte OledStatus;
+        public readonly HashSet<string> PendingEcho=new HashSet<string>();
+        public int EchoSent,EchoMatched,EchoUnexpected;
         public void Start(){link.Start();}public void Pause(){link.Pause();}public void ConfigurePort(string port){link.ConfigurePort(port);}
         public void Reconnect(){link.Reconnect();}public void Dispose(){link.Dispose();}
         public bool Send(byte type,byte[] data)
@@ -70,6 +73,8 @@ internal static class LiveUsageBench
                 tap.FrameReceived+=delegate(byte type,byte[] data){lock(tap){
                     if(type==FrameCodec.MsgInfo&&data.Length>=24){tap.Infos++;tap.Firmware=data[0]+"."+data[1];tap.OledStatus=data[4];}
                     if(type==FrameCodec.MsgAck&&data.Length>=2&&data[1]!=0)tap.Errors++;
+                    if(type==FrameCodec.MsgPong&&data.Length==4&&data[0]==0xD9&&data[1]==0x26)
+                    {if(tap.PendingEcho.Remove(BitConverter.ToString(data)))tap.EchoMatched++;else tap.EchoUnexpected++;}
                 }};
                 typeof(BridgeService).GetProperty("UsageSource",BindingFlags.Instance|BindingFlags.NonPublic).SetValue(bridge,usage,null);
                 usage.Start();bridge.Start();
@@ -77,6 +82,21 @@ internal static class LiveUsageBench
                 while(DateTime.UtcNow<end){lock(tap){if(tap.LocalKnown&&tap.AccountKnown)break;}Thread.Sleep(250);}
                 bridge.SetUsageScope("account");Thread.Sleep(2200);
                 bridge.SetUsageScope("local");Thread.Sleep(2200);
+                double echoSeconds=0;
+                if(args.Contains("--echo-60s"))
+                {
+                    var clock=Stopwatch.StartNew();ushort sequence=0;
+                    while(clock.Elapsed.TotalSeconds<60)
+                    {
+                        byte[] token={0xD9,0x26,(byte)sequence,(byte)(sequence>>8)};sequence++;
+                        lock(tap){tap.PendingEcho.Add(BitConverter.ToString(token));tap.EchoSent++;}
+                        if(!tap.Send(FrameCodec.MsgPing,token))throw new IOException("Echo send failed");
+                        Thread.Sleep(250);
+                    }
+                    echoSeconds=clock.Elapsed.TotalSeconds;
+                    DateTime grace=DateTime.UtcNow.AddSeconds(3);
+                    while(DateTime.UtcNow<grace){lock(tap){if(tap.PendingEcho.Count==0)break;}Thread.Sleep(50);}
+                }
                 lock(tap)
                 {
                     var activity=UsageActivity.Create(usage.Report,DateTimeOffset.UtcNow);
@@ -84,6 +104,7 @@ internal static class LiveUsageBench
                     bool passed=tap.LocalKnown&&tap.AccountKnown&&tap.LocalPage&&tap.AccountPage&&tap.SumContract&&tap.PcContract&&
                         tap.Firmware==expectedFirmware&&(tap.OledStatus&1)!=0&&tap.Errors==0&&tap.LocalFrames>1&&tap.AccountFrames>1;
                     if(args.Contains("--require-local-history"))passed&=history&&tap.LocalCurveNonzero;
+                    if(args.Contains("--echo-60s"))passed&=tap.EchoSent>=200&&tap.EchoSent==tap.EchoMatched&&tap.PendingEcho.Count==0&&tap.EchoUnexpected==0;
                     result["passed"]=passed;result["hostVersion"]=typeof(BridgeService).Assembly.GetName().Version.ToString();
                     result["localKnown"]=tap.LocalKnown;result["accountKnown"]=tap.AccountKnown;result["localCurrentNonzero"]=tap.LocalNonzero;
                     result["localHistoryRestored"]=history;result["nonzeroCurveSentToDevice"]=tap.LocalCurveNonzero;
@@ -91,6 +112,8 @@ internal static class LiveUsageBench
                     result["localAndAccountPagesSent"]=tap.LocalPage&&tap.AccountPage;result["endedOnLocal"]=config.UsageDisplayScope=="local";
                     result["pcMetrics28Bytes"]=tap.PcContract;result["localSumMatches"]=tap.SumContract;
                     result["firmware"]=tap.Firmware;result["oledOnline"]=(tap.OledStatus&1)!=0;result["errorAcks"]=tap.Errors;
+                    result["echoSeconds"]=Math.Round(echoSeconds,3);result["echoSent"]=tap.EchoSent;result["echoMatched"]=tap.EchoMatched;
+                    result["unansweredEcho"]=tap.PendingEcho.Count;result["unexpectedEcho"]=tap.EchoUnexpected;
                     result["personalValuesOrIdentityRecorded"]=false;code=passed?0:1;
                 }
             }

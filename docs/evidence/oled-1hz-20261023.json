@@ -80,7 +80,8 @@
     "personalValuesOrIdentityRecorded": false
   },
   "dailyHostRestored": true,
-  "acousticFeedback": "pending",
+  "acousticFeedback": "User reports no significant improvement; earlier randomized-clock trial sounded more effective.",
+  "acousticFeedbackDate": "2026-10-26",
   "physicalI2cTraceRecorded": false,
   "soundPressureMeasured": false,
   "fiveMinuteSoakRepeated": false,
