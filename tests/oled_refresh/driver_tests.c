@@ -20,8 +20,8 @@ HAL_StatusTypeDef HAL_I2C_Mem_Write(I2C_HandleTypeDef *h,uint16_t a,uint16_t m,u
   if(m==0x00&&n==2&&p[0]==0xD5)
   {
     if(clock_busy_once){clock_busy_once=0;return HAL_BUSY;}
-    check(p[1]==0x80||p[1]==0x90||p[1]==0xA0||p[1]==0xB0||p[1]==0xC0,"clock spread stays within the five accepted values");
-    clock_writes++;clock_mask|=1u<<((p[1]>>4)-8u);
+    check(p[1]==0x90||p[1]==0xA0||p[1]==0xB0,"clock spread stays within the three accepted values");
+    clock_writes++;clock_mask|=1u<<((p[1]>>4)-9u);
   }
   if(m==0x40)data_bytes+=n;
   return HAL_OK;
@@ -73,26 +73,26 @@ int main(void)
   }
   oled_set_config(0,1);calls=data_bytes=clock_writes=clock_mask=0;
   for(uint32_t now=5;now<=10000;now+=5)oled_noise_diag_process(now);
-  check(clock_writes==666&&clock_mask==31&&data_bytes==0,"strong clock spread runs independently of unchanged 1Hz framebuffer");
+  check(clock_writes==500&&clock_mask==7&&data_bytes==0,"gentle clock spread runs independently of unchanged 1Hz framebuffer");
   oled_dma_active=1;oled_noise_diag_process(10020);
   oled_dma_active=0;oled_dma_inflight=1;oled_noise_diag_process(10025);
   oled_dma_inflight=0;bus_busy=1;oled_noise_diag_process(10030);
-  bus_busy=0;check(clock_writes==666,"clock commands never interleave DMA or an occupied bus");
+  bus_busy=0;check(clock_writes==500,"clock commands never interleave DMA or an occupied bus");
   clock_busy_once=1;oled_noise_diag_process(10035);
-  check(clock_writes==666&&oled_ok,"HAL_BUSY does not lose the pending clock update");
-  oled_noise_diag_process(10035);oled_noise_diag_process(10045);
-  check(clock_writes==667,"clock update respects the 11ms minimum after busy recovery");
-  oled_noise_diag_process(10046);check(clock_writes==668,"clock update resumes at its due time");
+  check(clock_writes==500&&oled_ok,"HAL_BUSY does not lose the pending clock update");
+  oled_noise_diag_process(10035);oled_noise_diag_process(10051);
+  check(clock_writes==501,"clock update respects the 17ms minimum after busy recovery");
+  oled_noise_diag_process(10052);check(clock_writes==502,"clock update resumes at its due time");
   oled_set_config(0,2);oled_noise_diag_process(20000);
-  check(clock_writes==668,"unverified SH1106 clock profile is not applied");
+  check(clock_writes==502,"unverified SH1106 clock profile is not applied");
   test_tick=UINT32_MAX-10u;oled_set_config(0,0);
-  oled_noise_diag_process(UINT32_MAX);check(clock_writes==668,"clock interval remains bounded across tick wrap");
-  oled_noise_diag_process(0);check(clock_writes==669,"clock update resumes after tick wrap");
-  blocking_error=1;oled_noise_diag_process(11);
+  oled_noise_diag_process(5);check(clock_writes==502,"clock interval remains bounded across tick wrap");
+  oled_noise_diag_process(6);check(clock_writes==503,"clock update resumes after tick wrap");
+  blocking_error=1;oled_noise_diag_process(23);
   check(!oled_ok&&!oled_tx_fb_valid,"clock write failure triggers existing display reinitialization path");
-  blocking_error=0;test_tick=100;oled_init();oled_noise_diag_process(111);
-  check(clock_writes==670&&oled_ok,"clock updates restart after OLED reinitialization");
+  blocking_error=0;test_tick=100;oled_init();oled_noise_diag_process(117);
+  check(clock_writes==504&&oled_ok,"clock updates restart after OLED reinitialization");
   puts("OLED driver: PASS (SSD1306/SH1106, unchanged frames, DMA pending/busy, blocking fallback, error/reinit)");
-  puts("OLED strong clock spread: PASS (five values, cadence, idle bus, busy/error recovery, tick wrap, controller scope)");
+  puts("OLED gentle clock spread: PASS (three values, cadence, idle bus, busy/error recovery, tick wrap, controller scope)");
   return 0;
 }

@@ -80,7 +80,9 @@
     "personalValuesOrIdentityRecorded": false
   },
   "dailyHostRestored": true,
-  "acousticFeedbackOn013": "Pending user comparison",
+  "acousticFeedbackOn013": "User reports normal display and noise similar to three-value App0.12, and requests return to App0.12.",
+  "acousticFeedbackDate": "2026-10-26",
+  "userSelectedFirmwareAfterComparison": "0.12",
   "soundPressureOrInternalClockMeasured": false,
   "fiveMinuteSoakRepeated": false,
   "stableReleaseReplaced": false,

@@ -309,9 +309,9 @@ static void oled_write_cmd(uint8_t cmd)
 #if OLED_NOISE_DIAG_ROUND == 0u
 static void oled_clock_spread_process(uint32_t now_ms)
 {
-  /* Same values, seed and recurrence as the former round-5 strong trial.
+  /* Same values, seed and recurrence as the former round-5 gentle trial.
      Send only while the shared I2C bus is idle, outside framebuffer DMA. */
-  static const uint8_t values[] = {0x80u, 0x90u, 0xA0u, 0xB0u, 0xC0u};
+  static const uint8_t values[] = {0x90u, 0xA0u, 0xB0u};
   if (!oled_ok || oled_driver == 2u || oled_dma_active || oled_dma_inflight ||
       (uint32_t)(now_ms - oled_clock_spread_last_ms) < OLED_CLOCK_SPREAD_UPDATE_MS ||
       HAL_I2C_GetState(&hi2c3) != HAL_I2C_STATE_READY) return;

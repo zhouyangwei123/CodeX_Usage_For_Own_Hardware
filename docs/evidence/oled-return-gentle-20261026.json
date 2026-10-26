@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-26",
+  "userFeedbackOn013": "Display normal; noise similar to three-value App0.12. User requests return to three values.",
+  "selectedFirmwareVersion": "0.12",
+  "imageReusedWithoutRebuild": true,
+  "appSha256": "cd2b4b03607a524dbd6ed3d8af71bb8fbf2a5dacf723d08d28eb42f6fbd69618",
+  "offline": {
+    "nativeSchedulerAndCompleteDriverPassed": true,
+    "pageState1HzCases": 12,
+    "clockWritesPer10SecondsAt5msStep": 500,
+    "threeValuesObserved": true,
+    "original012ProductionSourceAndDriverTestRestored": true
+  },
+  "usb": {
+    "passed": true,
+    "initialFirmware": "0.13",
+    "targetFirmware": "0.12",
+    "reconnectedFirmware": "0.12",
+    "boot8192BytesUnchanged": true,
+    "optionBytesUnchanged": true,
+    "actualDfuMismatchRejectedBeforeMemoryAccess": true,
+    "trayExitDeniedWhileActualUpdateActive": true,
+    "steps": 11
+  },
+  "readbackByteIdentical": true,
+  "additionalLiveUsageAndEchoAttempt": {
+    "passed": false,
+    "errorType": "IOException"
+  },
+  "devicePresentAtFollowup": false,
+  "sleepWakeEventsObservedDuringTurn": true,
+  "communicationFailureCauseConfirmed": false,
+  "additionalCommunicationPassed": false,
+  "dailyHostRestored": true,
+  "stableReleaseReplaced": false,
+  "personalConfigOrCredentialsIncluded": false
+}
