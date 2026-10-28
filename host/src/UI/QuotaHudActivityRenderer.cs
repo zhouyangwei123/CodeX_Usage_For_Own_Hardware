@@ -86,7 +86,7 @@ namespace CodexToolsHost.UI
                     using(var dot=new SolidBrush(apiColor))g.FillEllipse(dot,138,footer+14,4,4);
                     for(int i=0;i<2;i++)Text(g,i<lines.Length?lines[i].Trim():"",value,ink,new RectangleF(18,footer+29+i*22,128,23),StringAlignment.Near);
                     Text(g,accountView ? "日用量 "+(measured?OledUsageFrame.FormatCount(usageFrame.Current):"--")
-                        : (tokenSpeed == null ? "--/s" : tokenSpeed.CompactText().Replace("~","≈")),value,ink,new RectangleF(162,footer+29,113,23),StringAlignment.Near);
+                        : (tokenSpeed == null ? "--/s" : tokenSpeed.CompactText()),value,ink,new RectangleF(162,footer+29,113,23),StringAlignment.Near);
                     Text(g,accountView ? account != null && account.ObservedAt != DateTimeOffset.MinValue ? "查询 "+account.ObservedAt.ToLocalTime().ToString("HH:mm") : "等待账号统计"
                         : "↑"+(measured?OledUsageFrame.FormatCount(usageFrame.Input,true):"--")+" ↓"+(measured?OledUsageFrame.FormatCount(usageFrame.Output,true):"--")+"/m",value,ink,new RectangleF(162,footer+51,113,23),StringAlignment.Near);
                     string[] speeds=(network??"↑-- ↓--").Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);

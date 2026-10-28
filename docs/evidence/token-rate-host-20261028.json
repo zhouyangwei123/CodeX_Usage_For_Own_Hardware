@@ -83,7 +83,16 @@
   "package": {
     "singleExe": true,
     "packagedExeMatchesTestedBuild": true,
-    "exeSha256": "3cecc3dbb9701cd004847d40312c228e3b7350e269f3867087b8a3d39e4e0bd3",
-    "zipSha256": "1fea4510330629ef82af62944172702f0e463f69e6ad54edb763f96209bfe197"
+    "exeSha256": "17519f6fdd83e922f545f775fe026a3afba8f278f04aa219c23aaa1a4a1930d4",
+    "zipSha256": "07e72e6bad626ad66729baf109ee3f770d304db6cf46d250eb58ea8dc41679bc"
+  },
+  "displayRevision": {
+    "ratePrefixRemoved": true,
+    "example": "123/s",
+    "focusedNativeChecksPassed": 125,
+    "pythonChecksPassed": 50,
+    "algorithmUnchanged": true,
+    "installed": true,
+    "configurationPreserved": true
   }
 }

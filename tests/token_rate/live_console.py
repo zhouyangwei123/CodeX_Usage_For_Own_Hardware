@@ -268,7 +268,7 @@ def frame(state):
         return "\n".join([
             "  CodeX  |  本机全部会话 Token 速度测试",
             "  " + "="*60, "",
-            f"        当前合计     ≈ {speed}  tok/s",
+            f"        当前合计       {speed}  tok/s",
             f'  近期活跃 {state["activeSessions"]} 个  /  已测速 {state["measuredSessions"]} 个  /  待测速 {state["waitingSessions"]} 个',
             "",
             f'  近60秒输入  {state["inputPerMinute"]:>14,} tok/min',
@@ -279,7 +279,7 @@ def frame(state):
             f'  状态      {state["status"]}', f"  速度更新  {age}", "",
             "  各会话独立平滑，并行速率相加；全部结束当前合计归零。",
             "  超过60秒的旧测速不计当前合计；历史用量保留。",
-            "  响应结束后更新，≈ 表示估算。按 Q 或 Ctrl+C 退出。",
+            "  响应结束后更新。按 Q 或 Ctrl+C 退出。",
             "  " + "="*60])
     average = "--" if state["average"] is None else f'{state["average"]:.1f}'
     measured = "--" if state["measuredSpeed"] is None else f'{state["measuredSpeed"]:.1f}'
@@ -288,9 +288,9 @@ def frame(state):
         "  CodeX  |  Token 速度测试",
         "  " + "="*60,
         "",
-        f"        输出速度     ≈ {speed}  tok/s",
-        f"        本轮均速     ≈ {average}  tok/s",
-        f"        最近测速     ≈ {measured}  tok/s",
+        f"        输出速度       {speed}  tok/s",
+        f"        本轮均速       {average}  tok/s",
+        f"        最近测速       {measured}  tok/s",
         "",
         f'  本会话近60秒   输入 {state["inputPerMinute"]:,}  /  输出 {state["outputPerMinute"]:,} tok/min',
         f'  本轮输入  {state["input"]:>12,}    本轮输出  {state["output"]:>10,}',
@@ -301,7 +301,7 @@ def frame(state):
         "",
         "  读取本次会话的真实数据；响应结束后更新速度。",
         "  轮次结束当前速度归零；累计用量保留，60秒用量自然回落。",
-        "  工具耗时不计入测速；≈ 表示估算值。",
+        "  工具耗时不计入测速。",
         "  继续在 Codex 中使用即可观察。按 Q 或 Ctrl+C 退出。",
         "  " + "="*60,
     ])

@@ -24,7 +24,7 @@ namespace CodexToolsHost.Usage
             while (value >= 1000 && index < units.Length - 1) { value /= 1000; index++; }
             value = Math.Round(value, value >= 100 ? 0 : 1, MidpointRounding.AwayFromZero);
             if (value >= 1000 && index < units.Length - 1) { value /= 1000; index++; }
-            return "~" + value.ToString("0.#", CultureInfo.InvariantCulture) + units[index] + "/s";
+            return value.ToString("0.#", CultureInfo.InvariantCulture) + units[index] + "/s";
         }
     }
 
