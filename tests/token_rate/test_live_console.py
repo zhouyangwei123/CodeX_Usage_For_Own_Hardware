@@ -93,10 +93,50 @@ class LiveConsoleTests(unittest.TestCase):
 
     def test_dashboard_has_numbers_and_no_timing_error_explanation(self):
         t = Turn(1000); model(t, 1000, 11000, "one"); usage(t, 11000, 1000, "one")
-        text = frame(t.snapshot(12000))
+        m = Monitor("thread"); m.turns["turn"] = t; m.last = t
+        text = frame(m.snapshot(12000))
         self.assertIn("100.0  tok/s", text)
         self.assertNotIn("异常", text)
         self.assertIn("1 秒前", text)
+
+    def test_completion_zeros_current_speed_but_keeps_measurement_and_totals(self):
+        t = Turn(1000); model(t, 1000, 11000, "one"); usage(t, 11000, 1000, "one")
+        t.complete(12000)
+        s = t.snapshot(13000)
+        self.assertEqual(s["speed"], 0)
+        self.assertEqual(s["measuredSpeed"], 100)
+        self.assertEqual(s["average"], 100)
+        self.assertEqual(s["output"], 1000)
+
+    def test_aborted_turn_also_zeros_speed(self):
+        t = Turn(1000); model(t, 1000, 11000, "one"); usage(t, 11000, 1000, "one")
+        t.complete(12000, aborted=True)
+        self.assertEqual(t.snapshot(13000)["speed"], 0)
+
+    def test_delayed_usage_after_completion_cannot_restart_current_speed(self):
+        t = Turn(1000); model(t, 1000, 11000, "one"); t.complete(11500)
+        usage(t, 12000, 1000, "one")
+        s = t.snapshot(13000)
+        self.assertEqual(s["speed"], 0)
+        self.assertEqual(s["measuredSpeed"], 100)
+        self.assertEqual(s["status"], "本轮已完成")
+
+    def test_rolling_minute_is_wall_clock_usage_and_expires_at_exact_boundary(self):
+        m = Monitor("thread"); t = Turn(1000); m.turns["turn"] = t; m.last = t
+        model(t, 1000, 11000, "one"); usage(t, 11000, 1000, "one"); t.complete(12000)
+        self.assertEqual(m.snapshot(13000)["speed"], 0)
+        self.assertEqual(m.snapshot(13000)["outputPerMinute"], 1000)
+        self.assertEqual(m.snapshot(70999)["outputPerMinute"], 1000)
+        self.assertEqual(m.snapshot(71000)["outputPerMinute"], 0)
+        self.assertEqual(m.snapshot(71000)["output"], 1000)
+
+    def test_minute_usage_crosses_turn_boundary_but_does_not_include_future(self):
+        m = Monitor("thread"); a = Turn(1000); b = Turn(12000)
+        m.turns.update(a=a, b=b); m.last = b
+        model(a, 1000, 11000, "a"); usage(a, 11000, 1000, "a"); a.complete(11500)
+        model(b, 12000, 22000, "b"); usage(b, 22000, 2000, "b")
+        self.assertEqual(m.snapshot(20000)["outputPerMinute"], 1000)
+        self.assertEqual(m.snapshot(23000)["outputPerMinute"], 3000)
 
 
 if __name__ == "__main__":

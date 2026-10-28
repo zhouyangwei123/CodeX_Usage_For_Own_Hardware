@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-28",
+  "testsPassed": 39,
+  "actualCompletedTurnZerosCurrentSpeed": true,
+  "lastMeasurementRetained": true,
+  "cumulativeTokensRetained": true,
+  "lateUsageDoesNotResumeCompletedTurn": true,
+  "minuteWindowBoundaryVerified": true,
+  "minuteWindowSpansTurns": true,
+  "emaAlpha": 0.35,
+  "upstreamRawMetric": "whole-turn cumulative average",
+  "consoleRawMetric": "last five eligible responses, time-weighted",
+  "numericalMixOfDecodeSpeedAndConsumption": false,
+  "hostFirmwareChanged": false,
+  "personalContentOrIdentityExported": false
+}

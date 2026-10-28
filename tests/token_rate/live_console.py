@@ -33,6 +33,7 @@ class Turn:
         self.speed = None
         self.speed_at = None
         self.status = "等待模型响应"
+        self.finished = False
         self.measurements = 0
         self.quality = Counter()
 
@@ -53,7 +54,8 @@ class Turn:
             self.bad_timing = True
             return
         self.pending.append((start, end))
-        self.status = "正在处理响应"
+        if not self.finished:
+            self.status = "正在处理响应"
 
     def usage(self, payload, stamp):
         usage, response = payload.get("usage"), payload.get("response_id")
@@ -69,7 +71,7 @@ class Turn:
             self.bad_timing = False
             self.usage_at = max(self.usage_at, stamp)
             return
-        self.responses[response] = tuple(values)
+        self.responses[response] = (stamp, tuple(values))
         self.input += values[0]
         self.cache += values[1]
         self.output += values[2]
@@ -81,7 +83,8 @@ class Turn:
         self.bad_timing = False
         self.usage_at = max(self.usage_at, stamp)
         self.at = max(self.at, stamp)
-        self.status = "等待下一段响应"
+        if not self.finished:
+            self.status = "等待下一段响应"
         if not usable:
             self.quality["timing_not_used_for_speed"] += 1
             return
@@ -90,7 +93,8 @@ class Turn:
         self.accepted_ms += duration
         measured = sum(ms for _, ms in self.recent)
         if measured < MIN_MEASUREMENT_MS:
-            self.status = "正在积累测速样本"
+            if not self.finished:
+                self.status = "正在积累测速样本"
             return
         raw = sum(tokens for tokens, _ in self.recent)*1000/measured
         if not math.isfinite(raw):
@@ -100,7 +104,9 @@ class Turn:
         self.measurements += 1
 
     def snapshot(self, now_ms):
-        return {"speed": round(self.speed, 1) if self.speed is not None else None,
+        measured = round(self.speed, 1) if self.speed is not None else None
+        return {"speed": 0.0 if self.finished else measured,
+                "measuredSpeed": measured,
                 "average": round(self.accepted_output*1000/self.accepted_ms, 1)
                 if self.accepted_ms >= MIN_MEASUREMENT_MS else None,
                 "input": self.input, "output": self.output, "cache": self.cache,
@@ -108,6 +114,11 @@ class Turn:
                 "ageSeconds": max(0, (now_ms-self.speed_at)//1000) if self.speed_at else None,
                 "status": self.status, "acceptedModelMs": self.accepted_ms,
                 "quality": dict(self.quality)}
+
+    def complete(self, stamp, aborted=False):
+        self.at = max(self.at, stamp)
+        self.finished = True
+        self.status = "本轮已停止" if aborted else "本轮已完成"
 
 
 class Monitor:
@@ -142,8 +153,7 @@ class Monitor:
         elif kind == "event_msg" and sub == "item_completed":
             turn.item(q, stamp)
         elif kind == "event_msg" and sub in ("task_complete", "turn_aborted"):
-            turn.at = max(turn.at, stamp)
-            turn.status = "本轮已完成" if sub == "task_complete" else "本轮已停止"
+            turn.complete(stamp, sub == "turn_aborted")
         self.last = max(self.turns.values(), key=lambda t: t.started)
 
     def read(self, path):
@@ -182,17 +192,26 @@ class Monitor:
                 # Keep the last measured display while a page is being replaced.
                 continue
 
-    def snapshot(self):
+    def snapshot(self, now_ms=None):
+        now_ms = int(time.time()*1000) if now_ms is None else now_ms
         if self.last:
-            return self.last.snapshot(int(time.time()*1000))
-        return {"speed": None, "average": None, "input": 0, "output": 0, "cache": 0,
-                "responses": 0, "measurements": 0, "ageSeconds": None,
-                "status": "等待读取本次会话", "quality": {}}
+            state = self.last.snapshot(now_ms)
+        else:
+            state = {"speed": None, "measuredSpeed": None, "average": None,
+                     "input": 0, "output": 0, "cache": 0, "responses": 0,
+                     "measurements": 0, "ageSeconds": None,
+                     "status": "等待读取本次会话", "quality": {}}
+        recent = [values for turn in self.turns.values()
+                  for stamp, values in turn.responses.values() if now_ms-60000 < stamp <= now_ms]
+        state["inputPerMinute"] = sum(v[0] for v in recent)
+        state["outputPerMinute"] = sum(v[2] for v in recent)
+        return state
 
 
 def frame(state):
     speed = "--" if state["speed"] is None else f'{state["speed"]:.1f}'
     average = "--" if state["average"] is None else f'{state["average"]:.1f}'
+    measured = "--" if state["measuredSpeed"] is None else f'{state["measuredSpeed"]:.1f}'
     age = "等待首个样本" if state["ageSeconds"] is None else f'{state["ageSeconds"]} 秒前'
     return "\n".join([
         "  CodeX  |  Token 速度测试",
@@ -200,7 +219,9 @@ def frame(state):
         "",
         f"        输出速度     ≈ {speed}  tok/s",
         f"        本轮均速     ≈ {average}  tok/s",
+        f"        最近测速     ≈ {measured}  tok/s",
         "",
+        f'  本会话近60秒   输入 {state["inputPerMinute"]:,}  /  输出 {state["outputPerMinute"]:,} tok/min',
         f'  本轮输入  {state["input"]:>12,}    本轮输出  {state["output"]:>10,}',
         f'  响应次数  {state["responses"]:>12}    测速更新  {state["measurements"]:>10}',
         "",
@@ -208,7 +229,8 @@ def frame(state):
         f"  速度更新  {age}",
         "",
         "  读取本次会话的真实数据；响应结束后更新速度。",
-        "  速度经过平滑，工具耗时不计入；≈ 表示估算值。",
+        "  轮次结束当前速度归零；累计用量保留，60秒用量自然回落。",
+        "  工具耗时不计入测速；≈ 表示估算值。",
         "  继续在 Codex 中使用即可观察。按 Q 或 Ctrl+C 退出。",
         "  " + "="*60,
     ])
