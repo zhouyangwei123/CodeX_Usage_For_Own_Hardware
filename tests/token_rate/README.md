@@ -1,5 +1,9 @@
 # 本地日志输出 TPS 可行性原型
 
+2026-10-28新增[可见命令行面板](live_console.py)。运行`python -X utf8 tests/token_rate/live_console.py --thread <本次对话ID>`，或使用`Start-LiveConsole.ps1 -Thread <ID>`。面板每0.5秒重绘，速度在新响应到达时更新，按Q或Ctrl+C退出。
+
+面板参考[codex-statusbar TpsTracker](https://github.com/dongyue-19/codex-statusbar/blob/main/src/CodexStatusbar/TpsTracker.cs)的时间窗并集、按响应去重、EMA系数0.35和计时有效性检查；采用最近5份合格响应的加权速率后再平滑。计时少于250ms的响应仍计入真实Token总数，但不参与测速；累计至少1秒有效模型时间才给出速度。未完成计时、计时反向或过长等情况均在内部处理，保留上次速度并显示距上次更新的时间，后续正常响应会继续测速，不让一条记录使整轮失效。这个面板与下方原始分析探针分开，保留之前的诊断结果以便比较。
+
 此原型用于2026-10-28的方案验证，不接管Codex调用，不读取认证资料、不联网，也不更新上位机或设备。仅用Python标准库；生产上位机仍使用.NET Framework 4.8。
 
 ```powershell

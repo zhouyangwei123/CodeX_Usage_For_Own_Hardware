@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-28",
+  "scenario": "visible terminal following current local conversation",
+  "testsPassed": 34,
+  "smoothedEstimateObserved": 112.0,
+  "weightedAverageObserved": 87.1,
+  "measurementCountAtFirstObservation": 6,
+  "measurementCountAtLaterObservation": 8,
+  "updatesAdvanced": true,
+  "terminalWindowTitlePresent": true,
+  "realData": true,
+  "shortTimingRegressionPassed": true,
+  "shortTimingStillCountsReportedTokens": true,
+  "subsequentGoodResponsesRecover": true,
+  "emaAlpha": 0.35,
+  "recentResponseWindow": 5,
+  "minimumResponseMs": 250,
+  "minimumAccumulatedMs": 1000,
+  "rawStreamingSpeedClaimed": false,
+  "hostFirmwareChanged": false,
+  "personalContentOrIdentityExported": false
+}
