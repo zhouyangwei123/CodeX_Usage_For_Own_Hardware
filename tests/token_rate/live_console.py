@@ -17,11 +17,13 @@ MIN_RESPONSE_MS = 250
 MIN_MEASUREMENT_MS = 1000
 MAX_ITEM_MS = 600000
 MAX_TPS = 100000
+CURRENT_SAMPLE_MS = 60000
 
 
 class Turn:
-    def __init__(self, started):
+    def __init__(self, started, has_start=True):
         self.started = started
+        self.has_start = has_start
         self.at = started
         self.usage_at = 0
         self.responses = {}
@@ -122,9 +124,13 @@ class Turn:
 
 
 class Monitor:
-    def __init__(self, thread):
+    def __init__(self, thread=None):
         self.thread = thread
         self.turns = {}
+        self.latest = {}
+        self.response_owners = {}
+        self.identities = {}
+        self.coverage = Counter()
         self.last = None
         self.offsets = {}
         self.partial = {}
@@ -135,7 +141,10 @@ class Monitor:
         if not isinstance(row, dict):
             return
         kind, q = row.get("type"), row.get("payload", {})
-        if not isinstance(q, dict) or (q.get("thread_id") or identity) != self.thread:
+        if not isinstance(q, dict):
+            return
+        source = q.get("thread_id") or identity
+        if not isinstance(source, str) or (self.thread and source != self.thread):
             return
         if kind not in ("event_msg", "token_usage_record", "response_item"):
             return
@@ -143,18 +152,35 @@ class Monitor:
         stamp = event_ms(row)
         if stamp is None or not isinstance(turn_id, str):
             return
-        if kind == "event_msg" and sub == "task_started" and turn_id:
-            self.turns.setdefault(turn_id, Turn(stamp))
-        turn = self.turns.get(turn_id)
-        if turn is None:
+        key = (source, turn_id)
+        if kind != "token_usage_record" and not (kind == "event_msg" and sub in
+                ("task_started", "item_completed", "task_complete", "turn_aborted")):
             return
+        turn = self.turns.setdefault(key, Turn(stamp, has_start=False))
+        if kind == "event_msg" and sub == "task_started" and not turn.has_start:
+            turn.started = stamp
+            turn.has_start = True
         if kind == "token_usage_record":
+            if not turn.has_start:
+                self.coverage["usage_without_turn_start"] += 1
+            response = q.get("response_id")
+            if isinstance(response, str):
+                owner = self.response_owners.setdefault(response, key)
+                if owner != key:
+                    self.coverage["inherited_response_duplicates"] += 1
+                    turn.pending.clear()
+                    turn.bad_timing = False
+                    turn.usage_at = max(turn.usage_at, stamp)
+                    return
             turn.usage(q, stamp)
         elif kind == "event_msg" and sub == "item_completed":
             turn.item(q, stamp)
         elif kind == "event_msg" and sub in ("task_complete", "turn_aborted"):
             turn.complete(stamp, sub == "turn_aborted")
-        self.last = max(self.turns.values(), key=lambda t: t.started)
+        previous = self.latest.get(source)
+        if previous is None or (turn.has_start, turn.started) >= (previous.has_start, previous.started):
+            self.latest[source] = turn
+        self.last = max(self.latest.values(), key=lambda t: t.started)
 
     def read(self, path):
         size = path.stat().st_size
@@ -162,6 +188,7 @@ class Monitor:
         if size < offset:
             offset = 0
             self.partial[path] = b""
+            self.identities.pop(path, None)
         if size == offset:
             return
         with path.open("rb") as stream:
@@ -172,18 +199,23 @@ class Monitor:
         self.partial[path] = lines.pop()
         for line in lines:
             if not any(tag in line for tag in
-                       (b'"task_started"', b'"task_complete"', b'"turn_aborted"',
+                       (b'"session_meta"', b'"task_started"', b'"task_complete"', b'"turn_aborted"',
                         b'"item_completed"', b'"token_usage_record"')):
                 continue
             try:
                 row = json.loads(line)
             except (ValueError, UnicodeError):
                 continue
-            self.observe(row, self.thread)
+            if isinstance(row, dict) and row.get("type") == "session_meta":
+                self.identities[path] = row.get("payload", {}).get("id")
+                continue
+            self.observe(row, self.identities.get(path, self.thread))
 
     def poll(self, home):
         if time.monotonic() >= self.next_discovery:
-            self.paths = sorted((home/"sessions").rglob("*"+self.thread+"*.jsonl"))
+            pattern = "*"+self.thread+"*.jsonl" if self.thread else "*.jsonl"
+            self.paths = sorted(p for folder in ("sessions", "archived_sessions")
+                                for p in (home/folder).rglob(pattern))
             self.next_discovery = time.monotonic()+3
         for path in self.paths:
             try:
@@ -205,11 +237,50 @@ class Monitor:
                   for stamp, values in turn.responses.values() if now_ms-60000 < stamp <= now_ms]
         state["inputPerMinute"] = sum(v[0] for v in recent)
         state["outputPerMinute"] = sum(v[2] for v in recent)
+        state["scope"] = "thread" if self.thread else "local"
+        state["snapshotAtMs"] = now_ms
+        if not self.thread:
+            active = [t for t in self.latest.values()
+                      if not t.finished and 0 <= now_ms-t.at <= CURRENT_SAMPLE_MS]
+            measured = [t for t in active if t.has_start and t.speed_at is not None
+                        and 0 <= now_ms-t.speed_at <= CURRENT_SAMPLE_MS]
+            state.update(
+                speed=round(sum(t.speed for t in measured), 1) if measured or not active else None,
+                input=sum(t.input for t in self.turns.values()),
+                output=sum(t.output for t in self.turns.values()),
+                responses=sum(len(t.responses) for t in self.turns.values()),
+                measurements=sum(t.measurements for t in self.turns.values()),
+                ageSeconds=min(((now_ms-t.speed_at)//1000 for t in measured), default=None),
+                activeSessions=len(active), measuredSessions=len(measured),
+                waitingSessions=len(active)-len(measured), discoveredSessions=len(self.latest),
+                files=len(self.paths),
+                status=("并行会话统计中" if len(active)>1 else "会话统计中" if active else
+                        "当前无活跃会话"),
+                coverage=dict(self.coverage),
+                sessionSpeeds=[round(t.speed, 1) for t in measured])
         return state
 
 
 def frame(state):
     speed = "--" if state["speed"] is None else f'{state["speed"]:.1f}'
+    if state.get("scope") == "local":
+        age = "等待近期样本" if state["ageSeconds"] is None else f'{state["ageSeconds"]} 秒前'
+        return "\n".join([
+            "  CodeX  |  本机全部会话 Token 速度测试",
+            "  " + "="*60, "",
+            f"        当前合计     ≈ {speed}  tok/s",
+            f'  近期活跃 {state["activeSessions"]} 个  /  已测速 {state["measuredSessions"]} 个  /  待测速 {state["waitingSessions"]} 个',
+            "",
+            f'  近60秒输入  {state["inputPerMinute"]:>14,} tok/min',
+            f'  近60秒输出  {state["outputPerMinute"]:>14,} tok/min',
+            f'  已读累计    输入 {state["input"]:,}  /  输出 {state["output"]:,}',
+            "",
+            f'  会话 {state["discoveredSessions"]} 个  /  日志 {state["files"]} 份  /  测速更新 {state["measurements"]} 次',
+            f'  状态      {state["status"]}', f"  速度更新  {age}", "",
+            "  各会话独立平滑，并行速率相加；全部结束当前合计归零。",
+            "  超过60秒的旧测速不计当前合计；历史用量保留。",
+            "  响应结束后更新，≈ 表示估算。按 Q 或 Ctrl+C 退出。",
+            "  " + "="*60])
     average = "--" if state["average"] is None else f'{state["average"]:.1f}'
     measured = "--" if state["measuredSpeed"] is None else f'{state["measuredSpeed"]:.1f}'
     age = "等待首个样本" if state["ageSeconds"] is None else f'{state["ageSeconds"]} 秒前'
@@ -251,15 +322,27 @@ def console_setup():
         print("\033[2J\033[?25l", end="", flush=True)
 
 
+def write_state(path, state, text):
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp = path.with_suffix(".tmp")
+        temp.write_text(json.dumps({**state, "frame": text}, ensure_ascii=False), encoding="utf-8")
+        temp.replace(path)
+        return True
+    except OSError:
+        # Optional diagnostics must not close the live panel when a reader holds it.
+        return False
+
+
 def main():
     cli = argparse.ArgumentParser(description=__doc__)
-    cli.add_argument("--thread", required=True)
+    cli.add_argument("--thread", help="optional: follow just one local conversation")
     cli.add_argument("--home", type=Path, default=Path(os.environ.get("CODEX_HOME", str(Path.home()/".codex"))))
     cli.add_argument("--seconds", type=int, default=0)
     cli.add_argument("--state-file", type=Path)
     cli.add_argument("--once", action="store_true")
     args = cli.parse_args()
-    if not args.thread or any(c not in "0123456789abcdef-" for c in args.thread.lower()):
+    if args.thread is not None and (not args.thread or any(c not in "0123456789abcdef-" for c in args.thread.lower())):
         cli.error("thread must be a local thread identifier")
     monitor = Monitor(args.thread)
     console_setup()
@@ -270,10 +353,7 @@ def main():
             state = monitor.snapshot()
             text = frame(state)
             if args.state_file:
-                args.state_file.parent.mkdir(parents=True, exist_ok=True)
-                temp = args.state_file.with_suffix(".tmp")
-                temp.write_text(json.dumps({**state, "frame": text}, ensure_ascii=False), encoding="utf-8")
-                temp.replace(args.state_file)
+                write_state(args.state_file, state, text)
             print(("\033[H\033[J" if sys.stdout.isatty() else "")+text, flush=True)
             if args.once or (args.seconds and time.monotonic()-start >= args.seconds):
                 break

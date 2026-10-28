@@ -1,0 +1,44 @@
+{
+  "date": "2026-10-28",
+  "unitTestsPassed": 50,
+  "realLogSoak": {
+    "passed": true,
+    "durationSeconds": 300.297,
+    "polls": 593,
+    "initialReplaySeconds": 0.716,
+    "averageCpuPercentOfOneCore": 1.311,
+    "sources": 20,
+    "files": 35,
+    "maxActiveSources": 2,
+    "maxSimultaneouslyMeasuredSources": 2,
+    "iterationsWithMeasurementAdvance": 9,
+    "aggregateMatchedPerSourceSum": true,
+    "responseIdsGloballyUnique": true,
+    "consumptionNeverRegressed": true,
+    "simulatedAllEndedZero": true,
+    "simulatedEndPreservesSlowAndCumulativeUsage": true,
+    "actualUserTasksInterrupted": false,
+    "hostFirmwareChanged": false,
+    "coverage": {
+      "usage_without_turn_start": 5
+    },
+    "personalContentOrIdentityExported": false
+  },
+  "independentRawAudit": {
+    "date": "2026-10-28",
+    "files": 35,
+    "sources": 20,
+    "reportedResponses": 1268,
+    "uniqueResponseCountMatches": true,
+    "inputMatchesIndependentRawSum": true,
+    "outputMatchesIndependentRawSum": true,
+    "personalContentOrIdentityExported": false
+  },
+  "visibleConsoleScope": "local",
+  "visibleConsoleVerified": true,
+  "liveStateFresh": true,
+  "hostIntegrationPerformed": false,
+  "stableReleaseChanged": false,
+  "longTermReliabilityClaimed": false,
+  "personalContentOrIdentityExported": false
+}

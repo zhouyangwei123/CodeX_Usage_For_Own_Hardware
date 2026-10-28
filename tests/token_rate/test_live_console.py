@@ -77,8 +77,8 @@ class LiveConsoleTests(unittest.TestCase):
                                        ("03", "other", "different")):
             m.observe({"timestamp": f"1970-01-01T00:00:{stamp}Z", "type": "event_msg",
                        "payload": {"type": "task_started", "turn_id": turn}}, identity)
-        self.assertIs(m.last, m.turns["new"])
-        self.assertNotIn("other", m.turns)
+        self.assertIs(m.last, m.turns[("thread", "new")])
+        self.assertNotIn(("different", "other"), m.turns)
 
     def test_partial_file_line_is_only_read_when_complete(self):
         m = Monitor("thread")
