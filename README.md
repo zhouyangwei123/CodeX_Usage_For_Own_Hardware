@@ -1,10 +1,10 @@
 # CodeX Usage
 
-本分支正在验证Host0.6.3：上位机默认汇总本机全部会话输出速率，并行相加、全部结束归零；分钟用量曲线保留。[接入与验证状态](docs/TOKEN_RATE_HOST-20261028.md)。本机已安装，USB实机验收待设备接回；正式Release仍为0.6.2，以下保留正式交付基线。
+当前上位机正式版本为 **0.6.3**：默认汇总本机全部会话输出速率，并行相加、全部结束归零，保留分钟用量曲线；短暂额度刷新失败时保留最近成功值。[发布与更新方法](docs/RELEASE-0.6.3.md)、[上位机下载](deliverables/host-0.6.3/README.md)。本轮只发布上位机，未重复USB实机验收；[接入与验证记录](docs/TOKEN_RATE_HOST-20261028.md)。以下保留此前交付基线。
 
 本分支当前回到[App0.12温和三档随机时钟](docs/OLED_GENTLE-20261026.md)，保留1Hz用量页；用户比较[App0.13五档](docs/OLED_STRONG-20261026.md)后反馈“显示正常，噪音差不多”，选择返回三档。五档源码及固件留存于历史提交与交付目录。下面保留正式Host0.6.2与App0.10交付基线；本次试验未改写正式Release。
 
-Windows 上位机与 STM32G474 桌面工具的联合仓库。当前版本：上位机 **0.6.2**、应用固件 **0.10**、启动程序 **1.0**。[正式发布与更新方法](docs/RELEASE-0.6.2.md)、[上位机下载](deliverables/host-0.6.2/README.md)。0.6.2修复分页日志遗漏，启动自动补回最近一小时真实用量；默认显示本机Token用量，可手动切换账号日汇总，新配置默认像素OLED皮肤。实测范围见[历史曲线修复](docs/USAGE_HISTORY-20261023.md)和[0.6.1 USB与OLED验收](docs/USB_OLED-20261023.md)。
+Windows 上位机与 STM32G474 桌面工具的联合仓库。此前交付基线：上位机 **0.6.2**、应用固件 **0.10**、启动程序 **1.0**。[0.6.2发布记录](docs/RELEASE-0.6.2.md)。0.6.2修复分页日志遗漏，启动自动补回最近一小时真实用量；默认显示本机Token用量，可手动切换账号日汇总，新配置默认像素OLED皮肤。实测范围见[历史曲线修复](docs/USAGE_HISTORY-20261023.md)和[0.6.1 USB与OLED验收](docs/USB_OLED-20261023.md)。
 
 0.10已通过USB写入并回读校验，启动区与保护设置保持。0.5.1/App0.9历史验证保留在[安全修复与验收](docs/USB_SAFETY-20261023.md)。悬停信息窗仍已移除；账号接口的日汇总不作为本机分钟活动的替代。
 
@@ -16,7 +16,7 @@ Windows 上位机与 STM32G474 桌面工具的联合仓库。当前版本：上�
 
 先阅读 [README_先看.md](README_先看.md)，开发接手阅读 [CODEX_接手说明.md](CODEX_接手说明.md)。
 
-正式发布包为 [0.6.2 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.6.2)。软件检查GitHub正式Release，不跟踪main或功能分支；下载与安装由用户手动完成。旧版验证保留在[0.4.2记录](docs/VALIDATION-0.4.2.md)和[0.5.1测试包及实测范围](deliverables/usb-update-0.5.1/README.md)。
+正式发布包为 [0.6.3 Release](https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.6.3)。软件检查GitHub正式Release，不跟踪main或功能分支；下载与安装由用户手动完成。旧版验证保留在[0.4.2记录](docs/VALIDATION-0.4.2.md)和[0.5.1测试包及实测范围](deliverables/usb-update-0.5.1/README.md)。
 
 - `host/`：WinForms 上位机，额度监控、电脑指标、按键/编码器配置与可选集成。
 - `firmware/STM32G474/`：CubeIDE 固件工程，2026-09-24 原样导入。
