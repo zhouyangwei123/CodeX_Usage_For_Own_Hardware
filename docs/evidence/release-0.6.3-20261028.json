@@ -1,0 +1,53 @@
+{
+  "date": "2026-10-28",
+  "version": "0.6.3",
+  "sourceBranch": "feat/account-oled-pixel-20261023",
+  "taggedCommit": "c9c8ae3002754f9d227e14b2ab06058efe557da3",
+  "releaseId": 426782037,
+  "releaseUrl": "https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.6.3",
+  "publishedAt": "2026-10-28T14:34:22Z",
+  "draft": false,
+  "prerelease": false,
+  "latestFormalRelease": true,
+  "assets": [
+    {
+      "name": "CodexToolsHost-0.6.3.zip",
+      "size": 3087617,
+      "digest": "sha256:8748329fc39d23945855361d5719f484bc99bf805f8f365c0554678e88de4a43",
+      "browser_download_url": "https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/download/v0.6.3/CodexToolsHost-0.6.3.zip"
+    },
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 92,
+      "digest": "sha256:fc8fb046949b3161b848e1e77ccece65b8a36469cce5672f14af3269ded30534",
+      "browser_download_url": "https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/download/v0.6.3/SHA256SUMS.txt"
+    }
+  ],
+  "publicDownloadVerification": {
+    "passed": true,
+    "tag": "v0.6.3",
+    "url": "https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.6.3",
+    "latestFormalRelease": true,
+    "publicDownloadWithoutAuthentication": true,
+    "downloadedZipMatchesTestedPackage": true,
+    "downloadedExeMatchesInstalled": true,
+    "checksumFileMatches": true,
+    "singleExeOnly": true,
+    "zipSha256": "8748329fc39d23945855361d5719f484bc99bf805f8f365c0554678e88de4a43",
+    "exeSha256": "40852e55876109ae72799dd332fca7329ccc52d185233c51c52aec9a2a38c16b",
+    "credentialUsedForVerification": false
+  },
+  "original042UpdateCheck": {
+    "CurrentVersion": "0.4.2.0",
+    "LatestTag": "v0.6.3",
+    "State": "UpdateAvailable",
+    "Message": "发现新版本 v0.6.3",
+    "ReleaseUrl": "https://github.com/zhouyangwei123/CodeX_Usage_For_Own_Hardware/releases/tag/v0.6.3",
+    "Successful": true
+  },
+  "hostOnly": true,
+  "firmwareIncluded": false,
+  "usbHardwareValidationRepeated": false,
+  "credentialsRecorded": false,
+  "personalConfigurationIncluded": false
+}
