@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-28",
+  "status": "feasibility prototype; production tok/min not replaced",
+  "sharedSource": "https://chatgpt.com/s/t_6ae149f0e958819194591a12065a795c",
+  "unitTestsPassed": 24,
+  "filesSampled": 8,
+  "finalHistorySnapshot": {
+    "formula": "reported output_tokens / union(Reasoning, AgentMessage) seconds",
+    "meaning": "completed-response boundary estimate; not instantaneous streaming TPS",
+    "scope": "sampled local logs; no account-wide live speed",
+    "turnsObserved": 20,
+    "turnsWithEstimate": 13,
+    "counters": {
+      "modern_usage_records": 254,
+      "unavailable_response_estimates": 61,
+      "legacy_token_count_records": 256,
+      "response_estimates": 193,
+      "subsecond_response_estimates": 34,
+      "response_boundary_updates": 202,
+      "invalid_model_windows": 5,
+      "invalid_tool_windows": 108
+    },
+    "unavailableReasons": {
+      "invalid_timing_or_counts": 5,
+      "awaiting_matching_usage_or_items": 2
+    },
+    "tpsRange": [
+      40.139,
+      362.167
+    ],
+    "tpsMedian": 93.589,
+    "messageContentOrIdentityExported": false
+  },
+  "initialObservation": {
+    "seconds": 120.041,
+    "updates": 3,
+    "sameSourceVerified": true,
+    "sameSourceUpdateGapRangeSeconds": [
+      11.653,
+      32.119
+    ],
+    "readLagMedianMs": 127
+  },
+  "finalObservation": {
+    "observedSeconds": 60.024,
+    "pollIntervalMs": 250,
+    "events": {
+      "event_msg/item_completed": 11,
+      "response_item/reasoning": 6,
+      "response_item/custom_tool_call_output": 3,
+      "event_msg/token_count": 3,
+      "response_item/message": 1,
+      "response_item/custom_tool_call": 2,
+      "token_usage_record/": 2
+    },
+    "responseUpdates": 2,
+    "readLagMedianMs": 162.5,
+    "updatesPerSource": {
+      "0": 1,
+      "1": 1
+    },
+    "sameSourceUpdateGapRangeSeconds": []
+  },
+  "shortWindowCounterexamples": [
+    {
+      "responseTps": 920000.0,
+      "responseWindowMs": 1,
+      "windowCount": 1,
+      "turnAverageTps": 406.678
+    }
+  ],
+  "rawStreamingGroundTruthCaptured": false,
+  "accuracyErrorQuantified": false,
+  "currentHostOrFirmwareChanged": false,
+  "thirdPartyProgramInstalled": false,
+  "credentialReadOrModelRequestSent": false,
+  "recommendedDisplay": "optional approximate turn-average output TPS, response-boundary updates; keep units distinct from tok/min",
+  "limitation": "completed-item client timing can be incomplete or extremely short; latest-response estimate is not suitable as default instantaneous speed",
+  "personalContentPathsOrIdentityExported": false
+}
