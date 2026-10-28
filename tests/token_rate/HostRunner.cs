@@ -85,7 +85,7 @@ internal static class HostTokenSpeedTests
             byte[] bits = OledPixelRenderer.RenderHostBits(frame, "U80K", "D1.2M", speed);
             for (int y = 0; y < 64; y++) for (int x = 0; x < 128; x++)
             {
-                if (x >= 2 && x <= 42 && y >= 56 && y <= 62 || x >= 2 && x <= 8 && y >= 25 && y <= 29) continue;
+                if (x >= 2 && x <= 42 && y >= 56 && y <= 62) continue;
                 int i = x + y / 8 * 128, mask = 1 << (y % 8);
                 if ((legacy[i] & mask) != (bits[i] & mask)) throw new Exception("speed changed graph, quota, bezel or details");
             }

@@ -98,7 +98,6 @@ namespace CodexToolsHost.UI
                 bits[x + y / 8 * 128] &= (byte)~(1 << (y % 8));
             var surface = new Surface(bits);
             surface.Text(2, 56, speed == null ? "--/s" : speed.CompactText());
-            if (frame.Has(OledUsageFrame.UsageKnown) && !frame.Has(OledUsageFrame.UsageStale)) surface.Text(2, 25, "/m", true);
             return bits;
         }
         internal static Bitmap Render(Size size, OledUsageFrame frame, PcMetricsSnapshot pc, bool expanded)
