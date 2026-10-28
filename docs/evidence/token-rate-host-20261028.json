@@ -1,0 +1,89 @@
+{
+  "date": "2026-10-28",
+  "hostVersion": "0.6.3.0",
+  "defaultScope": "local",
+  "scope": "all readable local sessions and archived sessions",
+  "algorithm": {
+    "recentResponses": 5,
+    "emaAlpha": 0.35,
+    "perSourceSmoothingThenSum": true,
+    "finishedSourceRemovedImmediately": true,
+    "allEndedZero": true,
+    "pendingSourcesNotInventedAsZero": true,
+    "staleMeasurementSeconds": 60,
+    "trueStreamingSpeedClaimed": false
+  },
+  "offline": {
+    "pythonUnitTestsPassed": 50,
+    "nativeChecksPassed": 126,
+    "crossLanguageCheckpoints": 53,
+    "fixtureCases": 7,
+    "activityTestsPassed": 30,
+    "usageTestsPassed": 26,
+    "hudAssertionsPassed": 77,
+    "renderingAndGdiChecksPassed": true,
+    "accountOledSkinChecksPassed": 203,
+    "exactFrameComparisonsPassed": 26,
+    "demoRasterStatesPassed": 216,
+    "actualReleaseSelfCheckPassed": true,
+    "actualReleaseMockLinkPassed": true
+  },
+  "frozenRealMetadataParity": {
+    "passed": true,
+    "files": 35,
+    "numericMetadataRecords": 6016,
+    "sources": 20,
+    "sameActiveAndMeasuredCounts": true,
+    "sameAggregateRate": true,
+    "messageBodiesRemoved": true,
+    "personalContentOrIdentityExported": false
+  },
+  "nativeReleaseLiveSoak": {
+    "passed": true,
+    "hostVersion": "0.6.3.0",
+    "elapsedSeconds": 300.077,
+    "snapshots": 580,
+    "rateUpdates": 16,
+    "peakActiveSources": 1,
+    "peakMeasuredSources": 1,
+    "idleSnapshots": 0,
+    "waitingSnapshots": 0,
+    "singleCoreCpuPercent": 3.848,
+    "privateMemoryPeakMiB": 37.07,
+    "personalContentOrIdentityRecorded": false,
+    "errorType": null
+  },
+  "localInstallation": {
+    "Scope": "local",
+    "FirmwareWritten": false,
+    "ExactCandidateBytes": true,
+    "Skin": "pixel",
+    "Version": "0.6.3.0",
+    "ConfigurationPreserved": true
+  },
+  "protocol": {
+    "statusUnchanged": true,
+    "pcMetricsV3Bytes": 28,
+    "deviceUsageStillPerMinute": true,
+    "hostCurveStillPerMinute": true,
+    "pixelCurveHeight": 35,
+    "firmwareWritten": false
+  },
+  "hardware": {
+    "status": "pending-device-connection",
+    "stm32Present": false,
+    "expectedPortPresent": false,
+    "thisVersionCommunicationTestPassed": false,
+    "historicalResultsReusedAsCurrentPass": false
+  },
+  "branchPushed": false,
+  "stableReleaseChanged": false,
+  "personalContentOrIdentityExported": false,
+  "actualUserTasksInterrupted": false,
+  "package": {
+    "singleExe": true,
+    "packagedExeMatchesTestedBuild": true,
+    "exeSha256": "3cecc3dbb9701cd004847d40312c228e3b7350e269f3867087b8a3d39e4e0bd3",
+    "zipSha256": "1fea4510330629ef82af62944172702f0e463f69e6ad54edb763f96209bfe197"
+  }
+}

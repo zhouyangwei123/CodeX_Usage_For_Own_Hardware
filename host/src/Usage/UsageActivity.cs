@@ -20,6 +20,7 @@ namespace CodexToolsHost.Usage
     }
     public sealed class UsageActivitySnapshot
     {
+        public TokenSpeedSnapshot TokenSpeed { get; internal set; }
         public DateTimeOffset AsOf { get; internal set; }
         public DateTimeOffset? LastEventAt { get; internal set; }
         public bool IsReady { get; internal set; }
@@ -35,8 +36,8 @@ namespace CodexToolsHost.Usage
     {
         internal const int RetentionSeconds = 3670;
         internal const int MaximumEvents = 50000;
-        // The service normally scans every 5s. Six missed intervals distinguish a stopped
-        // or failed reader from healthy, arbitrarily long periods with no token records.
+        // Report freshness distinguishes a stopped or failed reader from healthy,
+        // arbitrarily long periods with no token records.
         public const int StaleAfterSeconds = 30;
         public static UsageActivitySnapshot Create(UsageReport report, DateTimeOffset now)
         {
@@ -52,6 +53,7 @@ namespace CodexToolsHost.Usage
                 : new List<UsageActivityEvent>();
             if (events.Count > MaximumEvents) { partial = true; events.RemoveAt(events.Count - 1); }
             UsageActivitySnapshot result = new UsageActivitySnapshot {
+                TokenSpeed = report == null ? null : report.TokenSpeed,
                 AsOf = now, IsReady = ready, IsStale = stale, IsPartial = partial,
                 LastEventAt = ready && report.LastObservedEventAt <= now ? report.LastObservedEventAt : null,
                 Status = report != null && report.ScanFailed ? "读取失败" :

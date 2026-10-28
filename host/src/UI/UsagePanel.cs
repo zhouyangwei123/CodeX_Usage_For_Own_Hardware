@@ -171,7 +171,7 @@ namespace CodexToolsHost.UI
             if (IsDisposed || Disposing) return;
             bool accountView = source.SelectedIndex == 0;
             heading.Text = accountView ? "整个账号 Token 用量" : source.SelectedIndex == 2 ? "独立导入 Token 用量" : "本机 Token 用量";
-            description.Text = accountView ? "服务端累计量与按日汇总 · 自动查询，可能延迟 · 不显示逐秒速率。" : "每 5 秒增量刷新 · 缓存属于输入，推理属于输出。";
+            description.Text = accountView ? "服务端累计量与按日汇总 · 自动查询，可能延迟 · 不显示逐秒速率。" : "本机全部会话 · 响应结束后更新速率 · 缓存属于输入，推理属于输出。";
             string allLabel = accountView ? "已返回全部日期" : "全部会话";
             if (!Equals(period.Items[3], allLabel)) period.Items[3] = allLabel;
             importButton.Enabled = !accountView;

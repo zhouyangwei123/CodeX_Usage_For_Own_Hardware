@@ -3,7 +3,7 @@ $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $output = Join-Path $repo 'artifacts\token-activity-tests'
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
-$sources = @('UsageScanner.cs','UsageReport.cs','UsageActivity.cs','LocalUsageService.cs' | ForEach-Object {
+$sources = @('UsageScanner.cs','UsageReport.cs','UsageActivity.cs','LocalUsageService.cs','TokenSpeedTracker.cs' | ForEach-Object {
     Join-Path $repo ('host\src\Usage\' + $_)
 })
 $sources += Join-Path $repo 'tests\token_activity\TokenActivityTests.cs'

@@ -24,6 +24,7 @@ namespace CodexToolsHost.Usage
     {
         public string Source { get; internal set; }
         public DateTimeOffset UpdatedAt { get; internal set; }
+        public TokenSpeedSnapshot TokenSpeed { get; internal set; }
         public ReadOnlyCollection<UsageRow> Rows { get; internal set; }
         // Canonical numeric deltas only, before daily grouping. Never log bodies or session labels.
         public ReadOnlyCollection<UsageActivityEvent> RecentActivity { get; internal set; }

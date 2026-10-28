@@ -16,6 +16,7 @@ namespace CodexToolsHost.Usage
         private const int MaxLineBytes = 2 * 1024 * 1024;
         private const string MissingModelWarning = "部分用量缺少模型标记，保留为未知模型。";
         private readonly string home;
+        private readonly TokenSpeedTracker speed = new TokenSpeedTracker();
         private readonly Dictionary<string, FileState> files = new Dictionary<string, FileState>(StringComparer.OrdinalIgnoreCase);
         private List<string> knownPaths;
         private DateTime nextDiscovery;
@@ -65,7 +66,7 @@ namespace CodexToolsHost.Usage
                 // A failed enumeration cannot prove that previously discovered files disappeared.
                 if (warnings.Count > 0 && knownPaths != null) discovered = discovered.Union(knownPaths, StringComparer.OrdinalIgnoreCase).ToList();
                 changed = changed || knownPaths == null || !new HashSet<string>(knownPaths, StringComparer.OrdinalIgnoreCase).SetEquals(discovered);
-                knownPaths = discovered; nextDiscovery = DateTime.UtcNow.AddSeconds(60);
+                knownPaths = discovered; nextDiscovery = DateTime.UtcNow.AddSeconds(3);
             }
             warnings.UnionWith(discoveryWarnings);
             List<string> paths = knownPaths;
@@ -108,6 +109,7 @@ namespace CodexToolsHost.Usage
                 bool complete = sourceAvailable && !HasCoverageWarnings(warnings);
                 AddBoundaryWarning(warnings);
                 lastReport = new UsageReport { Rows = lastReport.Rows,
+                    TokenSpeed = speed.Snapshot(scanTime, sourceAvailable && pending == 0),
                     RecentActivity = lastReport.RecentActivity.Where(x => x.Time >= scanTime.AddSeconds(-UsageActivity.RetentionSeconds)).ToList().AsReadOnly(),
                     LastObservedEventAt = lastReport.LastObservedEventAt, ActivitySourceAvailable = sourceAvailable, IsScanComplete = complete,
                     Warnings = warnings.OrderBy(x => x).ToList().AsReadOnly(), UpdatedAt = scanTime,
@@ -203,6 +205,7 @@ namespace CodexToolsHost.Usage
             bool scanComplete = sourceAvailable && !HasCoverageWarnings(warnings);
             AddBoundaryWarning(warnings);
             lastReport = new UsageReport { Rows = grouped.AsReadOnly(), RecentActivity = recent.AsReadOnly(), LastObservedEventAt = lastEvent,
+                TokenSpeed = speed.Snapshot(scanTime, sourceAvailable && pending == 0),
                 ActivitySourceAvailable = sourceAvailable, IsScanComplete = scanComplete,
                 Warnings = warnings.OrderBy(x => x).ToList().AsReadOnly(), UpdatedAt = scanTime,
                 BytesRead = read, FilesDiscovered = paths.Count, FilesPending = pending };
@@ -336,14 +339,19 @@ namespace CodexToolsHost.Usage
         }
         private void Parse(string line, FileState state)
         {
-            // Fast filter: prompts, tool outputs and ordinary message content are never deserialized or retained.
-            if (line.IndexOf("\"session_meta\"", StringComparison.Ordinal) < 0 && line.IndexOf("\"turn_context\"", StringComparison.Ordinal) < 0 && line.IndexOf("\"token_count\"", StringComparison.Ordinal) < 0) return;
+            // Ignore ordinary response bodies. Lifecycle records are decoded transiently;
+            // the tracker retains only identifiers and numeric timing, never their content.
+            if (line.IndexOf("\"session_meta\"", StringComparison.Ordinal) < 0 && line.IndexOf("\"turn_context\"", StringComparison.Ordinal) < 0 &&
+                line.IndexOf("\"token_count\"", StringComparison.Ordinal) < 0 && line.IndexOf("\"token_usage_record\"", StringComparison.Ordinal) < 0 &&
+                line.IndexOf("\"task_started\"", StringComparison.Ordinal) < 0 && line.IndexOf("\"task_complete\"", StringComparison.Ordinal) < 0 &&
+                line.IndexOf("\"turn_aborted\"", StringComparison.Ordinal) < 0 && line.IndexOf("\"item_completed\"", StringComparison.Ordinal) < 0) return;
             try
             {
                 Dictionary<string, object> value = json.DeserializeObject(line) as Dictionary<string, object>;
                 Dictionary<string, object> payload = Object(value, "payload");
                 string type = Text(value, "type");
                 if (payload == null) return;
+                speed.Observe(value, state.Id);
                 if (type == "session_meta")
                 {
                     if (state.Id != null) return;

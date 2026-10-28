@@ -37,7 +37,7 @@ namespace CodexToolsHost.UI
         {
             if(_usage==null||_shutdown)return false;
             DateTimeOffset now=DateTimeOffset.UtcNow;
-            long bucket=now.UtcTicks/TimeSpan.FromSeconds(10).Ticks;
+            long bucket=now.UtcTicks/TimeSpan.FromSeconds(1).Ticks;
             if(!force&&bucket==_activityBucket)return false;
             _activityBucket=bucket;
             try{_activitySnapshot=UsageActivity.Create(_usage.Report,now);}

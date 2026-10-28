@@ -33,7 +33,7 @@ namespace CodexToolsHost.UI
         {
             if(size.Width<=0||size.Height<=0)throw new ArgumentOutOfRangeException("size");
             if (usageFrame == null) usageFrame = new OledUsageProjector().Create(false, quota, activity, null, 0, false, false, false, DateTimeOffset.UtcNow);
-            if (style == "pixel") return OledPixelRenderer.Render(size, usageFrame, null, expanded);
+            if (style == "pixel") return OledPixelRenderer.RenderLive(size, usageFrame, null, expanded, activity == null ? null : activity.TokenSpeed);
             style=opaque?"minimal":NormalizeStyle(style);
             Size standard=ActivityWindowSize(expanded);
             float scale=size.Width/(float)standard.Width;
@@ -59,8 +59,9 @@ namespace CodexToolsHost.UI
                     string hour=accountView ? account != null && account.LifetimeTokens.HasValue ? FormatTokens(account.LifetimeTokens.Value) : "--"
                         : measured&&activity!=null?qualifier+FormatTokens(activity.HourTokens):"--";
                     Text(g,(accountView?account != null && account.IsStale?"账号累计(过期) · ":"账号累计 · ":"本机近 1 小时 · ")+hour+" tokens",label,muted,new RectangleF(18,82,247,24),StringAlignment.Near);
-                    string status=accountView ? !measured ? "日汇总不可用" : "截至 "+usageFrame.Month.ToString("00")+"-"+usageFrame.Day.ToString("00") : activity==null?"扫描中":activity.Status=="正常"?
-                        (activity.InputTokensPerMinute+activity.OutputTokensPerMinute==0?"无新记录":"10s/点"):activity.Status;
+                    var tokenSpeed = activity == null ? null : activity.TokenSpeed;
+                    string status=accountView ? !measured ? "日汇总不可用" : "截至 "+usageFrame.Month.ToString("00")+"-"+usageFrame.Day.ToString("00")
+                        : tokenSpeed == null || !tokenSpeed.IsReady ? "测速准备中" : "并行 " + tokenSpeed.ActiveSessions + " · 待测 " + tokenSpeed.WaitingSessions;
                     Text(g,status,label,muted,new RectangleF(268,82,103,24),StringAlignment.Far);
                     DrawChartToggle(g,expanded);
                     if(expanded)DrawUsageChart(g,usageFrame,label,muted,style);
@@ -69,7 +70,7 @@ namespace CodexToolsHost.UI
                     g.DrawLine(separator,151,footer+12,151,footer+74);
                     g.DrawLine(separator,280,footer+12,280,footer+74);
                     Text(g,apiIsGo?"API / GO":"API",label,muted,new RectangleF(18,footer+5,126,24),StringAlignment.Near);
-                    Text(g,accountView?"TOKEN /day":"TOKEN /min",label,muted,new RectangleF(162,footer+5,112,24),StringAlignment.Near);
+                    Text(g,accountView?"TOKEN /day":"输出 /s",label,muted,new RectangleF(162,footer+5,112,24),StringAlignment.Near);
                     Text(g,"NET /s",label,muted,new RectangleF(292,footer+5,111,24),StringAlignment.Near);
                     string[] lines=(api??"--").Replace("\r","").Split('\n');
                     for(int i=0;i<lines.Length;i++)
@@ -84,9 +85,10 @@ namespace CodexToolsHost.UI
                     Color apiColor=apiStale?Color.FromArgb(166,180,198):apiAvailable?Color.FromArgb(125,231,194):Color.FromArgb(255,171,132);
                     using(var dot=new SolidBrush(apiColor))g.FillEllipse(dot,138,footer+14,4,4);
                     for(int i=0;i<2;i++)Text(g,i<lines.Length?lines[i].Trim():"",value,ink,new RectangleF(18,footer+29+i*22,128,23),StringAlignment.Near);
-                    Text(g,accountView ? "日用量 "+(measured?OledUsageFrame.FormatCount(usageFrame.Current):"--") : "↑入 "+(measured?qualifier+OledUsageFrame.FormatCount(usageFrame.Input):"--"),value,ink,new RectangleF(162,footer+29,113,23),StringAlignment.Near);
+                    Text(g,accountView ? "日用量 "+(measured?OledUsageFrame.FormatCount(usageFrame.Current):"--")
+                        : (tokenSpeed == null ? "--/s" : tokenSpeed.CompactText().Replace("~","≈")),value,ink,new RectangleF(162,footer+29,113,23),StringAlignment.Near);
                     Text(g,accountView ? account != null && account.ObservedAt != DateTimeOffset.MinValue ? "查询 "+account.ObservedAt.ToLocalTime().ToString("HH:mm") : "等待账号统计"
-                        : "↓出 "+(measured?qualifier+OledUsageFrame.FormatCount(usageFrame.Output):"--"),value,ink,new RectangleF(162,footer+51,113,23),StringAlignment.Near);
+                        : "↑"+(measured?OledUsageFrame.FormatCount(usageFrame.Input,true):"--")+" ↓"+(measured?OledUsageFrame.FormatCount(usageFrame.Output,true):"--")+"/m",value,ink,new RectangleF(162,footer+51,113,23),StringAlignment.Near);
                     string[] speeds=(network??"↑-- ↓--").Split(new[]{' '},StringSplitOptions.RemoveEmptyEntries);
                     for(int i=0;i<2;i++)Text(g,i<speeds.Length?speeds[i]:"--",value,ink,new RectangleF(292,footer+29+i*22,111,23),StringAlignment.Near);
                 }

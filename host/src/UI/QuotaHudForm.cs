@@ -690,7 +690,8 @@ namespace CodexToolsHost.UI
         {
             var scope = AppConfig.NormalizeUsageScope(_config.UsageDisplayScope);
             var usageFrame = _bridge.GetOledUsage(scope == "account");
-            if (IsPixel) return OledPixelRenderer.Render(ClientSize, usageFrame, _bridge.PcMetrics, _config.QuotaHudChartExpanded);
+            if (IsPixel) return OledPixelRenderer.RenderLive(ClientSize, usageFrame, _bridge.PcMetrics, _config.QuotaHudChartExpanded,
+                _usage == null ? null : _usage.Report.TokenSpeed);
             var accountSource = _source as IAccountUsageSource;
             if (_usage != null) return _renderer.RenderUsageFrame(ClientSize, _snapshot, _config.QuotaHudStyle,
                 _animationAngle, _refreshing, _apiDisplayText, _networkDisplayText,

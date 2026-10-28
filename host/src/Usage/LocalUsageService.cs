@@ -32,7 +32,7 @@ namespace CodexToolsHost.Usage
             lock (gate)
             {
                 if (disposed || timer != null) return;
-                timer = new System.Threading.Timer(delegate { RefreshAsync(); }, null, 1500, 5000);
+                timer = new System.Threading.Timer(delegate { RefreshAsync(); }, null, 500, 500);
             }
         }
         public Task RefreshAsync()
@@ -52,7 +52,6 @@ namespace CodexToolsHost.Usage
                 UsageReport next = scanner.Scan(stopping.Token);
                 lock (gate) { if (disposed) return; report = next; }
                 Notify();
-                lock (gate) { if (!disposed && timer != null) timer.Change(next.FilesPending > 0 ? 1000 : 5000, 5000); }
             }
             catch (OperationCanceledException) { }
             catch (Exception ex)
@@ -63,6 +62,7 @@ namespace CodexToolsHost.Usage
                 {
                     if (disposed) return;
                     report = new UsageReport { Source = report.Source, Rows = report.Rows, UpdatedAt = report.UpdatedAt,
+                        TokenSpeed = new TokenSpeedSnapshot { AsOf = DateTimeOffset.UtcNow, IsReady = false, Status = "读取失败" },
                         RecentActivity = report.RecentActivity, LastObservedEventAt = report.LastObservedEventAt,
                         ActivitySourceAvailable = report.ActivitySourceAvailable, IsScanComplete = false, ScanFailed = true,
                         FilesDiscovered = report.FilesDiscovered, IsImported = report.IsImported, PeriodKind = report.PeriodKind,

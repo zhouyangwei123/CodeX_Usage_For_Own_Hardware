@@ -82,7 +82,7 @@ namespace CodexToolsHost.UI
             var usageSource = new ToolStripMenuItem("用量来源");
             foreach (string scope in new[] { "account", "local" })
             {
-                var option = new ToolStripMenuItem(scope == "account" ? "整个账号 · 按日汇总" : "本机 · 每分钟活动") { Tag = scope };
+                var option = new ToolStripMenuItem(scope == "account" ? "整个账号 · 按日汇总" : "本机全部会话 · 输出速率与用量") { Tag = scope };
                 option.Click += delegate { _bridge.SetUsageScope((string)option.Tag); SaveConfigQuietly(); SyncSettingsHud(); };
                 usageSource.DropDownItems.Add(option);
             }

@@ -1,5 +1,15 @@
 # 本地日志输出 TPS 可行性原型
 
+Host0.6.3已将本机合计方案移植到.NET已有读取服务，命令行继续作独立算法对照。[接入范围与验证](../../docs/TOKEN_RATE_HOST-20261028.md)。离线检查包含Python生成的7组、53个逐项对照点，实际.NET定时服务的发现与完成归零、像素布局、账号模式和串口数据保持；真实日志对照只在忽略目录保存已去除正文的计时元数据。
+
+```powershell
+./host/build.ps1
+./tests/token_rate/run-host.ps1 -Python python -Live -SoakSeconds 300
+python tests/token_rate/compare_host_metadata.py artifacts/token-rate-host-20261028
+```
+
+持续检查引用实际单EXE发布程序集，读取真实本机日志，不修改日志或停止用户任务。`-Live`及元数据对照需要本机存在Codex日志；不具备日志时仅运行不带参数的构造检查。以下内容保留前期命令行试验的统计口径与限制。
+
 2026-10-28新增[可见命令行面板](live_console.py)。运行`python -X utf8 tests/token_rate/live_console.py`或`Start-LiveConsole.ps1`，默认读取本机sessions及archived_sessions全部日志；仍可通过`--thread <ID>`只看一个会话。面板每0.5秒重绘，速度在新响应到达时更新，按Q或Ctrl+C退出。
 
 本机合计按“每个会话的最新轮次”分别计算、平滑，然后相加；不再对合计值叠加平滑，避免某个会话结束后还残留在合计里。全部结束时当前合计为0，已读累计和近60秒消耗继续保留。面板同时显示已测速与待测速会话数，待测速部分不假装已测得0。超过60秒的旧测量不计当前合计，防止历史未闭合日志永久占速。

@@ -5,6 +5,7 @@ using System.Drawing.Imaging;
 using System.Globalization;
 using CodexToolsHost.Monitor;
 using CodexToolsHost.Protocol;
+using CodexToolsHost.Usage;
 
 namespace CodexToolsHost.UI
 {
@@ -30,7 +31,8 @@ namespace CodexToolsHost.UI
         }
         private sealed class Surface
         {
-            internal readonly byte[] Bits = new byte[1024];
+            internal readonly byte[] Bits;
+            internal Surface(byte[] bits = null) { Bits = bits ?? new byte[1024]; }
             internal void Pixel(int x, int y)
             { if (x >= 0 && x < 128 && y >= 0 && y < 64) Bits[x + y / 8 * 128] |= (byte)(1 << (y % 8)); }
             internal void Rect(int x, int y, int w, int h)
@@ -88,10 +90,26 @@ namespace CodexToolsHost.UI
             s.Text(2, 56, frame.CurrentText()); s.Text(44, 58, frame.DetailText(), true);
             return s.Bits;
         }
+        internal static byte[] RenderHostBits(OledUsageFrame frame, string upload, string download, TokenSpeedSnapshot speed)
+        {
+            byte[] bits = RenderBits(frame, upload, download);
+            if (frame.View != 0) return bits;
+            for (int y = 56; y <= 62; y++) for (int x = 2; x <= 42; x++)
+                bits[x + y / 8 * 128] &= (byte)~(1 << (y % 8));
+            var surface = new Surface(bits);
+            surface.Text(2, 56, speed == null ? "--/s" : speed.CompactText());
+            if (frame.Has(OledUsageFrame.UsageKnown) && !frame.Has(OledUsageFrame.UsageStale)) surface.Text(2, 25, "/m", true);
+            return bits;
+        }
         internal static Bitmap Render(Size size, OledUsageFrame frame, PcMetricsSnapshot pc, bool expanded)
+        { return RenderCore(size, frame, pc, expanded, null, false); }
+        internal static Bitmap RenderLive(Size size, OledUsageFrame frame, PcMetricsSnapshot pc, bool expanded, TokenSpeedSnapshot speed)
+        { return RenderCore(size, frame, pc, expanded, speed, true); }
+        private static Bitmap RenderCore(Size size, OledUsageFrame frame, PcMetricsSnapshot pc, bool expanded, TokenSpeedSnapshot speed, bool live)
         {
             bool network = pc != null && pc.NetworkSpeedAvailable && !pc.IsStale && DateTimeOffset.UtcNow - pc.SampledAtUtc <= TimeSpan.FromSeconds(10);
-            byte[] bits = RenderBits(frame, Network('U', pc == null ? 0 : pc.NetworkUploadKiBPerSecond, network), Network('D', pc == null ? 0 : pc.NetworkDownloadKiBPerSecond, network));
+            string up = Network('U', pc == null ? 0 : pc.NetworkUploadKiBPerSecond, network), down = Network('D', pc == null ? 0 : pc.NetworkDownloadKiBPerSecond, network);
+            byte[] bits = live ? RenderHostBits(frame, up, down, speed) : RenderBits(frame, up, down);
             Size logical = LogicalSize(expanded);
             using (var source = new Bitmap(logical.Width, logical.Height, PixelFormat.Format32bppPArgb))
             {

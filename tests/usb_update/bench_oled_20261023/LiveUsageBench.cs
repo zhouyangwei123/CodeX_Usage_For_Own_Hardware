@@ -100,14 +100,18 @@ internal static class LiveUsageBench
                 lock(tap)
                 {
                     var activity=UsageActivity.Create(usage.Report,DateTimeOffset.UtcNow);
+                    var speed=usage.Report.TokenSpeed;
+                    bool speedReady=speed!=null&&speed.IsReady&&speed.SessionCount>1;
                     bool history=activity.HourTokens>0&&activity.Points.Any(x=>x.Time<DateTimeOffset.UtcNow.AddMinutes(-1)&&x.InputTokens+x.OutputTokens>0);
                     bool passed=tap.LocalKnown&&tap.AccountKnown&&tap.LocalPage&&tap.AccountPage&&tap.SumContract&&tap.PcContract&&
                         tap.Firmware==expectedFirmware&&(tap.OledStatus&1)!=0&&tap.Errors==0&&tap.LocalFrames>1&&tap.AccountFrames>1;
                     if(args.Contains("--require-local-history"))passed&=history&&tap.LocalCurveNonzero;
+                    if(args.Contains("--require-local-speed"))passed&=speedReady;
                     if(args.Contains("--echo-60s"))passed&=tap.EchoSent>=200&&tap.EchoSent==tap.EchoMatched&&tap.PendingEcho.Count==0&&tap.EchoUnexpected==0;
                     result["passed"]=passed;result["hostVersion"]=typeof(BridgeService).Assembly.GetName().Version.ToString();
                     result["localKnown"]=tap.LocalKnown;result["accountKnown"]=tap.AccountKnown;result["localCurrentNonzero"]=tap.LocalNonzero;
                     result["localHistoryRestored"]=history;result["nonzeroCurveSentToDevice"]=tap.LocalCurveNonzero;
+                    result["nativeAllLocalSpeedReady"]=speedReady;
                     result["localFrames"]=tap.LocalFrames;result["accountFrames"]=tap.AccountFrames;
                     result["localAndAccountPagesSent"]=tap.LocalPage&&tap.AccountPage;result["endedOnLocal"]=config.UsageDisplayScope=="local";
                     result["pcMetrics28Bytes"]=tap.PcContract;result["localSumMatches"]=tap.SumContract;
