@@ -105,9 +105,9 @@ namespace CodexToolsHost.UI
             Color color=style=="classic"?Color.FromArgb(247,68,99):Color.FromArgb(89,224,210);
             if(remaining.HasValue&&remaining.Value<20)color=Color.FromArgb(255,153,112);
             Text(g,"CODEX / 7D",label,muted,new RectangleF(18,8,240,24),StringAlignment.Near);
-            Text(g,QuotaHudPresentation.FormatPercent(quota.IsStale?null:remaining),value,ink,new RectangleF(280,8,76,24),StringAlignment.Far);
+            Text(g,QuotaHudPresentation.FormatPercent(remaining),value,ink,new RectangleF(280,8,76,24),StringAlignment.Far);
             using(var trough=new SolidBrush(Color.FromArgb(150,5,10,19)))FillRounded(g,trough,track,4f);
-            using(var fill=new SolidBrush(color))FillRounded(g,fill,FillRectangle(track,quota.IsStale?null:remaining),4f);
+            using(var fill=new SolidBrush(color))FillRounded(g,fill,FillRectangle(track,remaining),4f);
             Text(g,quota.IsStale?"额度数据过期":"重置 "+QuotaHudPresentation.FormatResetCountdown(reset,DateTimeOffset.UtcNow),label,muted,new RectangleF(18,49,338,23),StringAlignment.Near);
             DrawRefresh(g,RefreshHitBounds(new Rectangle(0,0,420,78)),angle,refreshing,quota.IsStale);
         }

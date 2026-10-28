@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-28",
+  "hostVersion": "0.6.3.0",
+  "cause": "Known quota was hidden by the host renderer whenever the source became stale",
+  "hostKeepsLastKnownQuota": true,
+  "accountLogoutAndChangeStillClear": true,
+  "sourceFreshnessAndObservedTimePreserved": true,
+  "deviceProtocolAndFirmwareUnchanged": true,
+  "liveObservation": {
+    "durationSeconds": 150.111,
+    "pollSeconds": 10,
+    "productionPollSeconds": 30,
+    "firstFreshQuotaSeconds": 16.117,
+    "successfulQuotaResponses": 12,
+    "rpcOrTransportErrors": 0,
+    "staleTransitionsAfterFirstSuccess": 0,
+    "finalKnown": true,
+    "finalStale": false,
+    "reconnects": 0,
+    "repeatedUserInterruptionReproduced": false
+  },
+  "tests": {
+    "nativeHostChecks": 134,
+    "quotaReliabilityCases": 25,
+    "quotaFailures": 0,
+    "hudAssertions": 77,
+    "accountOledSkinChecks": 203,
+    "exactFrameComparisons": 26,
+    "demoRasterStates": 216
+  },
+  "localHostUpdated": true,
+  "hardwareUsed": false,
+  "personalContentOrIdentityExported": false
+}

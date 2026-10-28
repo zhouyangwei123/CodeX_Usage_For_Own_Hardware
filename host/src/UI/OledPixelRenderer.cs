@@ -56,9 +56,11 @@ namespace CodexToolsHost.UI
             }
         }
         internal static byte[] RenderBits(OledUsageFrame frame, string upload, string download)
+        { return RenderContentBits(frame, upload, download, false); }
+        private static byte[] RenderContentBits(OledUsageFrame frame, string upload, string download, bool keepLastQuota)
         {
             var s = new Surface();
-            bool quota = frame.Has(OledUsageFrame.QuotaKnown) && !frame.Has(OledUsageFrame.QuotaStale);
+            bool quota = frame.Has(OledUsageFrame.QuotaKnown) && (keepLastQuota || !frame.Has(OledUsageFrame.QuotaStale));
             bool usage = frame.Has(OledUsageFrame.UsageKnown) && !frame.Has(OledUsageFrame.UsageStale);
             s.Text(2, 2, quota ? "7D " + frame.Remaining + "%" : "7D --");
             uint seconds = frame.ResetSeconds;
@@ -92,7 +94,7 @@ namespace CodexToolsHost.UI
         }
         internal static byte[] RenderHostBits(OledUsageFrame frame, string upload, string download, TokenSpeedSnapshot speed)
         {
-            byte[] bits = RenderBits(frame, upload, download);
+            byte[] bits = RenderContentBits(frame, upload, download, true);
             if (frame.View != 0) return bits;
             for (int y = 56; y <= 62; y++) for (int x = 2; x <= 42; x++)
                 bits[x + y / 8 * 128] &= (byte)~(1 << (y % 8));

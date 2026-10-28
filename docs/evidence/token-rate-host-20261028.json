@@ -83,17 +83,18 @@
   "package": {
     "singleExe": true,
     "packagedExeMatchesTestedBuild": true,
-    "exeSha256": "1d206955e2573108c29da54cc004a2e1e3e2b4ff9b9649c40cb4435a29edac1d",
-    "zipSha256": "8aa46df59c8f20b54fdbe711c0ab47462c1697f8d25ab3824b303470781e525e"
+    "exeSha256": "40852e55876109ae72799dd332fca7329ccc52d185233c51c52aec9a2a38c16b",
+    "zipSha256": "8748329fc39d23945855361d5719f484bc99bf805f8f365c0554678e88de4a43"
   },
   "displayRevision": {
     "ratePrefixRemoved": true,
     "example": "123/s",
-    "focusedNativeChecksPassed": 125,
+    "focusedNativeChecksPassed": 134,
     "pythonChecksPassed": 50,
     "algorithmUnchanged": true,
     "installed": true,
     "configurationPreserved": true,
-    "extraAxisUnitRemoved": true
+    "extraAxisUnitRemoved": true,
+    "retainsKnownQuotaOnTransientFailure": true
   }
 }

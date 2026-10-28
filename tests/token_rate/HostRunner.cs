@@ -9,6 +9,7 @@ using System.Web.Script.Serialization;
 using CodexToolsHost.Usage;
 using CodexToolsHost.Protocol;
 using CodexToolsHost.UI;
+using CodexToolsHost.Model;
 
 internal static class HostTokenSpeedTests
 {
@@ -97,6 +98,32 @@ internal static class HostTokenSpeedTests
         frame.View = 1;
         Check(OledPixelRenderer.RenderBits(frame,"U80K","D1.2M").SequenceEqual(OledPixelRenderer.RenderHostBits(frame,"U80K","D1.2M",new TokenSpeedSnapshot())),
             "account daily mode is not presented as account live TPS");
+        var rate = new TokenSpeedSnapshot { IsReady=true, TokensPerSecond=100 };
+        foreach (byte view in new byte[] { 0, 1 })
+        {
+            frame.View=view;
+            byte[] fresh=OledPixelRenderer.RenderHostBits(frame,"U80K","D1.2M",rate);
+            frame.Flags|=OledUsageFrame.QuotaStale; byte[] staleWire=frame.Encode();
+            Check(OledPixelRenderer.RenderHostBits(frame,"U80K","D1.2M",rate).SequenceEqual(fresh),
+                "transient quota error retains percentage countdown and bar on host");
+            Check(frame.Encode().SequenceEqual(staleWire), "host display does not alter device stale flag");
+            frame.Flags=(byte)(frame.Flags & ~OledUsageFrame.QuotaKnown);
+            Check(!OledPixelRenderer.RenderHostBits(frame,"U80K","D1.2M",rate).SequenceEqual(fresh),
+                "cleared account quota is never restored from leftover numeric fields");
+            frame.Flags|=OledUsageFrame.QuotaKnown;frame.Flags=(byte)(frame.Flags & ~OledUsageFrame.QuotaStale);
+        }
+        var quota=new QuotaSnapshot(78,null,DateTimeOffset.UtcNow.AddDays(3),null,DateTimeOffset.UtcNow,false,10080,null,"");
+        var renderer=new QuotaHudRenderer();
+        foreach(string style in new[]{"glass","minimal","classic"})
+        using(var fresh=renderer.RenderActivityFrame(new Size(420,300),quota,style,0,false,"API 4.99","U0 D0",false,true,false,false,null,true))
+        using(var stale=renderer.RenderActivityFrame(new Size(420,300),quota.AsStale("fixture"),style,0,false,"API 4.99","U0 D0",false,true,false,false,null,true))
+        {
+            bool same=true;
+            foreach(var region in new[]{new Rectangle(280,8,76,24),new Rectangle(18,37,338,8)})
+                for(int y=region.Top;y<region.Bottom;y++)for(int x=region.Left;x<region.Right;x++)
+                    same&=fresh.GetPixel(x,y)==stale.GetPixel(x,y);
+            Check(same,style+" retains last known quota number and fill during transient errors");
+        }
     }
     static void Live(string output, string home)
     {
